@@ -35,7 +35,7 @@ export const FACTORY_ADDRESSES = {
 
   BASE: {
     chainId: 8453,
-    address: "0x69db1Ea748Aa83214c99ab1109fc34eba94734C0",
+    address: "0x38D64ef112d7d840667CfBc268179eE410403A94",
   },
 
   BASE_SEPOLIA: {
