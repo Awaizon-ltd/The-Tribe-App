@@ -9,6 +9,7 @@ import {
   TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../contexts/ThemeContext'; // Adjust path as needed
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
@@ -16,6 +17,7 @@ import Button from '../../components/common/Button';
 const SupportScreen = ({ navigation }) => {
   const theme = useTheme();
   const styles = createStyles(theme);
+  const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState('articles'); // 'articles', 'chat', 'ticket'
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -762,7 +764,7 @@ Your recovery phrase is your responsibility. We cannot help if you lose it!
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={theme.COLORS.text} />
         </TouchableOpacity>

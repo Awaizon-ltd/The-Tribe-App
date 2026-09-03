@@ -26,8 +26,12 @@ export const DAO_FACTORY_ADDRESSES = {
   // Base (Mainnet)
   8453: "0x38D64ef112d7d840667CfBc268179eE410403A94",
 
-  // Base Sepolia (Testnet)
-  84532: "0x4B3AD106552927494E0DB019170c1E5d4E5D08Eb",
+  // Robinhood Chain (Mainnet) — same address as Base above; confirm this was
+  // a deterministic/CREATE2 deployment before relying on it in production.
+  4663: "0x38D64ef112d7d840667CfBc268179eE410403A94",
+
+  // Robinhood Chain Testnet
+  46630: "0x38D64ef112d7d840667CfBc268179eE410403A94",
 
   // // Abstract Mainnet
   // 2741: '0xYourAbstractFactoryAddress',
@@ -74,7 +78,7 @@ export const FEE_TOKEN_ADDRESSES = {
   // 10: '0xYourOptimismFeeToken',
   43114: "0x49D5c2BdFfac6CE2BFdB6640F4F80f226bc10bAB", // WETH
   8453: "0xb62015c281c7e54380934B45ED9bb035200A9838",
-  84532: "0xE81cE73a9dF6C1a893ee024D6E8176283b2E9E6C",
+  // 4663: '0xYourRobinhoodFeeToken', // no confirmed WETH-equivalent on Robinhood Chain yet
   // 2741: '0xYourAbstractFeeToken',
 };
 

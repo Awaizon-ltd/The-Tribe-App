@@ -9,6 +9,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../contexts/ThemeContext';
 import { NavigationCache } from '../../navigation/NavigationCache';
+// Google Sign-In disabled for now — email/password only. Re-enable by
+// uncommenting these imports and the usages below (search "Google Sign-In").
+// import { useAuth } from '../../contexts/AuthContext';
+// import { useGoogleAuth } from '../../hooks/useGoogleAuth';
+// import Alert from '../../utils/Alert';
 
 const { width: W } = Dimensions.get('window');
 const CARD_W = W * 0.72;
@@ -59,6 +64,11 @@ const WelcomeScreen = ({ navigation }) => {
   const carouselRef = useRef(null);
   const mountAnim   = useRef(new Animated.Value(0)).current;
 
+  // Google Sign-In disabled for now — email/password only.
+  // const { loginWithGoogle } = useAuth();
+  // const { request: googleRequest, promptAsync: promptGoogleAsync, idToken: googleIdToken } = useGoogleAuth();
+  // const [googleLoading, setGoogleLoading] = useState(false);
+
   useEffect(() => {
     NavigationCache.setOnboardingComplete();
   }, []);
@@ -82,6 +92,38 @@ const WelcomeScreen = ({ navigation }) => {
 
   const handleGetStarted = () => navigation.navigate('Register');
   const handleSignIn = () => navigation.navigate('Login');
+
+  // Google Sign-In disabled for now — email/password only.
+  // Was: deliberately minimal here — once loginWithGoogle succeeds, the
+  // app's top-level nav state machine (AuthNavigator/Navigation.js) takes
+  // over and routes based on isAuthenticated/hasProfileData/firestoreWalletExists
+  // regardless of which screen triggered sign-in, so this screen doesn't
+  // need to manage any of that itself. The one thing it can't do inline is
+  // complete an account-linking conflict (no email/password form here) —
+  // on that specific error, send the user to Login, which has the full
+  // conflict-handling flow.
+  // useEffect(() => {
+  //   if (!googleIdToken) return;
+  //   (async () => {
+  //     try {
+  //       setGoogleLoading(true);
+  //       await loginWithGoogle(googleIdToken);
+  //     } catch (err) {
+  //       if (err.code === 'auth/account-exists-with-different-credential') {
+  //         Alert.alert(
+  //           'Account Already Exists',
+  //           err.message || 'An account already exists for this email. Sign in with your original method to link Google to it.',
+  //           [{ text: 'Sign In', onPress: () => navigation.navigate('Login') }],
+  //         );
+  //       } else {
+  //         Alert.alert('Google Sign-In Failed', err.message || 'Please try again.');
+  //       }
+  //     } finally {
+  //       setGoogleLoading(false);
+  //     }
+  //   })();
+  //   // eslint-disable-next-line react-hooks/exhaustive-deps
+  // }, [googleIdToken]);
 
   const bgGradient = isDark
     ? [`${COLORS.primary}0d`, COLORS.background, `${COLORS.primary}07`]
@@ -241,11 +283,25 @@ const WelcomeScreen = ({ navigation }) => {
           onPress={handleGetStarted}
           activeOpacity={0.88}
         >
-          <Text style={[styles.primaryBtnText, { color: COLORS.background }]}>Get Started</Text>
+          <Text style={[styles.primaryBtnText, { color: COLORS.onPrimary }]}>Get Started</Text>
           <View style={styles.primaryBtnIcon}>
             <Ionicons name="arrow-forward" size={18} color={COLORS.primary} />
           </View>
         </TouchableOpacity>
+
+        {/* Google Sign-In disabled for now — email/password only.
+        <TouchableOpacity
+          style={[styles.googleBtn, { borderColor: COLORS.border, backgroundColor: COLORS.surface }]}
+          onPress={() => promptGoogleAsync()}
+          disabled={googleLoading || !googleRequest}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="logo-google" size={18} color={COLORS.text} />
+          <Text style={[styles.googleBtnText, { color: COLORS.text }]}>
+            {googleLoading ? 'Signing in…' : 'Continue with Google'}
+          </Text>
+        </TouchableOpacity>
+        */}
 
         <View style={styles.signInRow}>
           <Text style={[styles.signInText, { color: COLORS.textSecondary }]}>
@@ -382,6 +438,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.25)',
     alignItems: 'center', justifyContent: 'center',
   },
+  googleBtn: {
+    height: 52, borderRadius: 16, borderWidth: 1,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 10,
+  },
+  googleBtnText: { fontSize: 15, fontWeight: '700' },
   signInRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
   },

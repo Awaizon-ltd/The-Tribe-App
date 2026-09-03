@@ -4,10 +4,11 @@ import { useChain } from '../contexts/ChainContext';
 import { useAppMode } from '../contexts/AppModeContext';
 import { SUPPORTED_CHAINS } from '../constants/Chain';
 
-// Module-level constants — stable references, no re-creation on renders
-const COMMUNITY_CHAINS_PROD = [SUPPORTED_CHAINS.BASE];
-const COMMUNITY_CHAINS_DEV  = [SUPPORTED_CHAINS.BASE, SUPPORTED_CHAINS.BASE_SEPOLIA];
-const COMMUNITY_CHAINS = __DEV__ ? COMMUNITY_CHAINS_DEV : COMMUNITY_CHAINS_PROD;
+// Module-level constant — stable reference, no re-creation on renders.
+// Robinhood Testnet is available in Community mode in every build,
+// including production — it's the one testnet ChainContext.js's production
+// guards allow through (see constants/Chain.js's isTestnetAllowedInProduction).
+const COMMUNITY_CHAINS = [SUPPORTED_CHAINS.ROBINHOOD, SUPPORTED_CHAINS.ROBINHOOD_TESTNET];
 
 export const useAvailableChains = () => {
   const { getAvailableChains, activeChain } = useChain();

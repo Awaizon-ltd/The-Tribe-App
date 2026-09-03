@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { View, StyleSheet, BackHandler, Share } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Clipboard from "expo-clipboard";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useTheme } from "../../contexts/ThemeContext";
@@ -64,8 +65,15 @@ const CHAIN_NAMES = {
 
 const BrowserScreen = ({ navigation }) => {
   const { COLORS } = useTheme();
+  const insets = useSafeAreaInsets();
   const { wallet, createSignerForTransaction, provider, address } = useWallet();
   const { activeChain, switchChain, chains } = useChain();
+  // One brand color everywhere now — Robinhood lime, same in wallet and
+  // community mode. Discover is shared between both (wallet mode's Explore
+  // tab and community mode's "Browser" stack screen), so BrowserHome still
+  // takes accentColor as a prop rather than reading theme.COLORS.primary
+  // itself, but both modes now pass the same value.
+  const accentColor = COLORS.primary;
 
   // Navigation state
   const [currentUrl, setCurrentUrl] = useState("");
@@ -709,7 +717,7 @@ const BrowserScreen = ({ navigation }) => {
   const styles = createStyles(COLORS);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       {!isHome && (
         <BrowserHeader
           inputUrl={inputUrl}
@@ -745,6 +753,7 @@ const BrowserScreen = ({ navigation }) => {
           handleNavigate={handleNavigate}
           handleUrlSubmit={handleUrlSubmit}
           onChainPress={() => setChainSwitcherVisible(true)}
+          accentColor={accentColor}
         />
       ) : (
         <BrowserWebView

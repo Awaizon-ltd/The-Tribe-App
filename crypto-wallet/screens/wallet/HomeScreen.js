@@ -35,23 +35,24 @@ import { formatAddress } from "../../utils/Wallet";
 import {
   getAllNativePricesByChainId,
   fetchTrendingCoins,
-} from "../../services/coingecko";
+} from "../../services/CoinGeckoService";
 import * as Clipboard from "expo-clipboard";
 import { useChain } from "../../contexts/ChainContext";
-import { SUPPORTED_CHAINS, MAINNET_CHAIN_IDS } from "../../constants/Chain";
+import { SUPPORTED_CHAINS, MAINNET_CHAIN_IDS, isTestnetAllowedInProduction } from "../../constants/Chain";
 import { useAppMode } from "../../contexts/AppModeContext";
 import UserIcon from "../../components/common/UserIcon";
 import Alert from "../../utils/Alert";
 import { getAllNFTsAcrossChains } from "../../utils/blockchain";
 import { useAvailableChains } from "../../hooks/useAvailableChains";
 import QRScanner from "../../components/wallet/QRScanner";
+import { useMultichainPortfolio } from "../../hooks/useMultichainPortfolio";
 
 const NFT_CARD_WIDTH = 130;
 const BADGE_SIZE = 84;
 
 const COMMUNITY_VISIBLE_CHAINS = [
-  SUPPORTED_CHAINS.BASE.id,
-  SUPPORTED_CHAINS.BASE_SEPOLIA.id,
+  SUPPORTED_CHAINS.ROBINHOOD.id,
+  SUPPORTED_CHAINS.ROBINHOOD_TESTNET.id,
 ];
 
 // ─── Shared helpers ──────────────────────────────────────────────────────────
@@ -157,11 +158,20 @@ const HomeScreen = ({ navigation }) => {
   const [trending, setTrending] = useState([]);
   const [loadingTrending, setLoadingTrending] = useState(false);
 
+  // Per-token (ERC-20) breakdown alongside the native-balance-per-chain list
+  // above — additive, doesn't touch useWallet()'s own balance fetching.
+  const {
+    tokensByChain,
+    loading: loadingTokens,
+    refresh: refreshTokens,
+  } = useMultichainPortfolio(wallet?.address, availableChains);
+
   useEffect(() => {
     if (wallet) {
       refreshBalance();
       loadNFTs();
       loadPrices();
+      if (isWalletMode) refreshTokens();
     }
   }, [wallet, availableChains]);
 
@@ -211,7 +221,12 @@ const HomeScreen = ({ navigation }) => {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([refreshBalance(), loadNFTs(), loadPrices()]);
+    await Promise.all([
+      refreshBalance(),
+      loadNFTs(),
+      loadPrices(),
+      ...(isWalletMode ? [refreshTokens()] : []),
+    ]);
     setRefreshing(false);
   };
 
@@ -223,8 +238,10 @@ const HomeScreen = ({ navigation }) => {
   };
 
   const getAssetsWithPrices = () => {
+    // Testnets are hidden in production, except the allow-listed ones
+    // (currently Robinhood Chain Testnet, for Community mode).
     const chainsToShow = isProduction
-      ? availableChains.filter((c) => !c.testnet)
+      ? availableChains.filter((c) => !c.testnet || isTestnetAllowedInProduction(c.id))
       : availableChains;
 
     return chainsToShow
@@ -268,10 +285,8 @@ const HomeScreen = ({ navigation }) => {
         totalWeight
       : 0;
 
-  const changePositive = totalChange24h >= 0;
-
   // ─────────────────────────────────────────────────────────────────────────
-  // WALLET MODE — multi-chain DeFi layout (UNCHANGED)
+  // WALLET MODE — multi-chain DeFi layout, redesigned (phase 1)
   // ─────────────────────────────────────────────────────────────────────────
   if (isWalletMode) {
     const wStyles = walletStyles(COLORS, F, S, insets);
@@ -313,74 +328,39 @@ const HomeScreen = ({ navigation }) => {
           </View>
 
           {/* ── Portfolio Hero ── */}
-          <LinearGradient
-            colors={[COLORS.card, COLORS.surface, COLORS.background]}
-            style={wStyles.heroCard}
-          >
-            <View style={wStyles.heroTop}>
-              <Text style={wStyles.heroLabel}>Total Portfolio</Text>
-              <TouchableOpacity
-                style={wStyles.chainCountPill}
-                onPress={() => setShowChainSwitcher(true)}
-              >
-                <ChainIcon
-                  chain={activeChain}
-                  size={16}
-                  style={wStyles.activeChainDot}
-                />
-                <Text style={wStyles.chainCountText}>{activeChain.name}</Text>
-                <Ionicons
-                  name="chevron-down"
-                  size={12}
-                  color={COLORS.primary}
-                />
-              </TouchableOpacity>
-            </View>
+          <PortfolioSummary
+            totalValue={totalValue}
+            totalChange24h={totalChange24h}
+            loading={loadingPrices}
+            includesTestnet={includesTestnet}
+            accentColor={COLORS.primary}
+            activeChain={activeChain}
+            onPressChain={() => setShowChainSwitcher(true)}
+          />
 
-            <Text style={wStyles.heroValue}>
-              ${loadingPrices ? "—" : fmt(totalValue)}
-            </Text>
-
-            <View style={wStyles.heroChangeRow}>
-              <Ionicons
-                name={changePositive ? "trending-up" : "trending-down"}
-                size={16}
-                color={changePositive ? COLORS.primary : COLORS.error}
-              />
-              <Text
+          {/* Chain pips — quick visual read of which chains hold balance,
+              kept below the hero card rather than inside it. */}
+          <View style={wStyles.chainRow}>
+            {assets.map((a) => (
+              <ChainIcon
+                key={a.chain.id}
+                chain={a.chain}
+                size={24}
                 style={[
-                  wStyles.heroChange,
-                  { color: changePositive ? COLORS.primary : COLORS.error },
+                  wStyles.chainPip,
+                  a.chain.id === activeChain.id && wStyles.chainPipActive,
+                  a.isZeroBalance && { opacity: 0.35 },
                 ]}
-              >
-                {changePositive ? "+" : ""}
-                {fmt(totalChange24h)}% (24h)
-              </Text>
-            </View>
-
-            {/* Chain pips */}
-            <View style={wStyles.chainRow}>
-              {assets.map((a) => (
-                <ChainIcon
-                  key={a.chain.id}
-                  chain={a.chain}
-                  size={24}
-                  style={[
-                    wStyles.chainPip,
-                    a.chain.id === activeChain.id && wStyles.chainPipActive,
-                    a.isZeroBalance && { opacity: 0.35 },
-                  ]}
-                />
-              ))}
-            </View>
-          </LinearGradient>
+              />
+            ))}
+          </View>
 
           {/* ── Quick Actions ── */}
           <View style={wStyles.actionsRow}>
             {[
               { icon: "paper-plane-outline", label: "Send", screen: "Send" },
               { icon: "barcode-outline", label: "Receive", screen: "Receive" },
-              { icon: "repeat-outline", label: "Swap", screen: "SwapTab" },
+              { icon: "infinite-outline", label: "Swap", screen: "SwapTab" },
               {
                 icon: "time-outline",
                 label: "History",
@@ -389,14 +369,14 @@ const HomeScreen = ({ navigation }) => {
             ].map(({ icon, label, screen }) => (
               <TouchableOpacity
                 key={label}
-                style={wStyles.actionPill}
+                style={wStyles.actionTile}
                 onPress={() => navigation.navigate(screen)}
                 activeOpacity={0.7}
               >
-                <View style={wStyles.actionIcon}>
-                  <Ionicons name={icon} size={28} color={COLORS.primary} />
-                  <Text style={wStyles.actionLabel}>{label}</Text>
+                <View style={wStyles.actionIconCircle}>
+                  <Ionicons name={icon} size={22} color={COLORS.primary} />
                 </View>
+                <Text style={wStyles.actionLabel}>{label}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -510,78 +490,130 @@ const HomeScreen = ({ navigation }) => {
             {assets.map((a) => {
               const isActive = a.chain.id === activeChain.id;
               const changePos = (a.priceChange24h ?? 0) >= 0;
+              const chainTokens = tokensByChain[a.chain.id] || [];
               return (
-                <TouchableOpacity
-                  key={a.chain.id}
-                  style={wStyles.assetRow}
-                  onPress={() =>
-                    navigation.navigate("TokenDetail", {
-                      chain: a.chain,
-                      balance: a.balance,
-                      usdValue: a.usdValue,
-                      price: a.price,
-                      priceChange24h: a.priceChange24h,
-                      walletAddress: wallet?.address,
-                    })
-                  }
-                  activeOpacity={0.65}
-                >
-                  {isActive && <View style={wStyles.activeBar} />}
+                <React.Fragment key={a.chain.id}>
+                  <TouchableOpacity
+                    style={wStyles.assetRow}
+                    onPress={() =>
+                      navigation.navigate("TokenDetail", {
+                        chain: a.chain,
+                        balance: a.balance,
+                        usdValue: a.usdValue,
+                        price: a.price,
+                        priceChange24h: a.priceChange24h,
+                        walletAddress: wallet?.address,
+                      })
+                    }
+                    activeOpacity={0.65}
+                  >
+                    {isActive && <View style={wStyles.activeBar} />}
 
-                  <View style={wStyles.assetIconWrap}>
-                    <ChainIcon
-                      chain={a.chain}
-                      size={40}
-                      style={wStyles.assetIcon}
-                    />
-                    {a.isTestnet && <View style={wStyles.testnetRing} />}
-                  </View>
+                    <View style={wStyles.assetIconWrap}>
+                      <ChainIcon
+                        chain={a.chain}
+                        size={40}
+                        style={wStyles.assetIcon}
+                      />
+                      {a.isTestnet && <View style={wStyles.testnetRing} />}
+                    </View>
 
-                  <View style={wStyles.assetLeft}>
-                    <Text style={wStyles.assetName} numberOfLines={1}>
-                      {a.chain.name}
-                    </Text>
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: 4,
-                      }}
-                    >
-                      <Text style={wStyles.assetSymbol}>{a.chain.symbol}</Text>
-                      {a.priceChange24h != null && (
-                        <Text
-                          style={[
-                            wStyles.assetChange,
-                            {
-                              color: changePos ? COLORS.primary : COLORS.error,
-                            },
-                          ]}
-                        >
-                          {changePos ? "+" : ""}
-                          {fmt(a.priceChange24h, 1)}%
+                    <View style={wStyles.assetLeft}>
+                      <Text style={wStyles.assetName} numberOfLines={1}>
+                        {a.chain.name}
+                      </Text>
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 4,
+                        }}
+                      >
+                        <Text style={wStyles.assetSymbol}>{a.chain.symbol}</Text>
+                        {a.priceChange24h != null && (
+                          <Text
+                            style={[
+                              wStyles.assetChange,
+                              {
+                                color: changePos ? COLORS.primary : COLORS.error,
+                              },
+                            ]}
+                          >
+                            {changePos ? "+" : ""}
+                            {fmt(a.priceChange24h, 1)}%
+                          </Text>
+                        )}
+                        {a.isTestnet && (
+                          <Text style={wStyles.assetTestnet}>Testnet</Text>
+                        )}
+                      </View>
+                    </View>
+
+                    <View style={wStyles.assetRight}>
+                      <Text style={wStyles.assetBalance} numberOfLines={1}>
+                        {fmt(parseFloat(a.balance), 4)} {a.chain.symbol}
+                      </Text>
+                      {a.price > 0 && (
+                        <Text style={wStyles.assetPrice} numberOfLines={1}>
+                          {fmtPrice(a.price)}
                         </Text>
                       )}
-                      {a.isTestnet && (
-                        <Text style={wStyles.assetTestnet}>Testnet</Text>
-                      )}
+                      <Text style={wStyles.assetUsd}>${fmt(a.usdValue)}</Text>
                     </View>
-                  </View>
+                  </TouchableOpacity>
 
-                  <View style={wStyles.assetRight}>
-                    <Text style={wStyles.assetBalance} numberOfLines={1}>
-                      {fmt(parseFloat(a.balance), 4)} {a.chain.symbol}
-                    </Text>
-                    {a.price > 0 && (
-                      <Text style={wStyles.assetPrice} numberOfLines={1}>
-                        {fmtPrice(a.price)}
-                      </Text>
-                    )}
-                    <Text style={wStyles.assetUsd}>${fmt(a.usdValue)}</Text>
-                  </View>
-                </TouchableOpacity>
+                  {/* Per-token rows on chains where a balance breakdown is
+                      available (Alchemy-supported chains, plus whatever the
+                      log-scan fallback found elsewhere). No USD value yet —
+                      that needs a token-price proxy endpoint, a later phase —
+                      shown as "—" rather than a faked number. */}
+                  {chainTokens.map((t) => (
+                    <TouchableOpacity
+                      key={`${a.chain.id}-${t.address}`}
+                      style={wStyles.tokenRow}
+                      onPress={() =>
+                        navigation.navigate("TokenDetail", {
+                          chain: { ...t, name: t.symbol, symbol: t.symbol },
+                          balance: t.formatted,
+                          usdValue: 0,
+                          price: 0,
+                          priceChange24h: null,
+                          walletAddress: wallet?.address,
+                        })
+                      }
+                      activeOpacity={0.65}
+                    >
+                      <View style={wStyles.tokenIconWrap}>
+                        {t.logo ? (
+                          <Image source={{ uri: t.logo }} style={wStyles.tokenIcon} />
+                        ) : (
+                          <View style={[wStyles.tokenIcon, wStyles.tokenIconFallback]}>
+                            <Text style={wStyles.tokenIconFallbackText}>
+                              {t.symbol?.charAt(0)?.toUpperCase() || "?"}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                      <View style={wStyles.assetLeft}>
+                        <Text style={wStyles.tokenName} numberOfLines={1}>
+                          {t.name}
+                        </Text>
+                        <Text style={wStyles.assetSymbol}>on {a.chain.name}</Text>
+                      </View>
+                      <View style={wStyles.assetRight}>
+                        <Text style={wStyles.assetBalance} numberOfLines={1}>
+                          {fmt(parseFloat(t.formatted), 4)} {t.symbol}
+                        </Text>
+                        <Text style={wStyles.assetUsd}>—</Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </React.Fragment>
               );
             })}
+            {loadingTokens && (
+              <Text style={wStyles.tokensLoadingHint}>Scanning token balances…</Text>
+            )}
           </View>
         </ScrollView>
 
@@ -607,7 +639,7 @@ const HomeScreen = ({ navigation }) => {
   // language as the AirdropCard on ProfileScreen — same product family,
   // different screen), actions are warm filled pills instead of outlined
   // neutrals, and NFTs are round "Badges" instead of square trading cards.
-  // Since this mode is always scoped to Base, there's nothing to switch —
+  // Since this mode is always scoped to Robinhood Chain, there's nothing to switch —
   // that absence itself is the signal this is a different kind of screen.
   //
   // Header now also has a shareable-membership-card quick action (id-card
@@ -716,9 +748,19 @@ const HomeScreen = ({ navigation }) => {
           </LinearGradient>
         </View>
 
-        {/* ── Quick Actions — warm filled pills ── */}
+        {/* ── Quick Actions — warm filled pills ──
+              "Fund" is the highest-leverage action here: a fresh Robinhood
+              Chain community wallet starts empty, and this is the one button
+              that gets money into it from wherever the user already holds
+              funds (Swap screen's Route row, cross-chain via LI.FI). ── */}
         <View style={cStyles.actionsRow}>
           {[
+            {
+              icon: "arrow-down-circle",
+              label: "Fund",
+              screen: "Swap",
+              bg: COLORS.primary,
+            },
             {
               icon: "paper-plane",
               label: "Send",
@@ -750,7 +792,7 @@ const HomeScreen = ({ navigation }) => {
               onPress={() => navigation.navigate(screen)}
             >
               <View style={[cStyles.actionIcon, { backgroundColor: bg }]}>
-                <Ionicons name={icon} size={20} color="#fff" />
+                <Ionicons name={icon} size={20} color={COLORS.onPrimary} />
               </View>
               <Text style={cStyles.actionLabel}>{label}</Text>
             </Pressable>
@@ -802,7 +844,7 @@ const HomeScreen = ({ navigation }) => {
                 color={COLORS.textTertiary}
               />
               <Text style={cStyles.emptyBadgeText}>
-                No badges yet — join a guild to start earning them
+                No badges yet — join a tribe to start earning them
               </Text>
             </View>
           ) : (
@@ -855,14 +897,14 @@ const HomeScreen = ({ navigation }) => {
         {/* ── Community Rewards CTA ── */}
         <WSYNCard onMintPress={() => navigation.navigate("MintTRIBE")} />
 
-        {/* ── Wallet strip (Base only) ── */}
+        {/* ── Wallet strip (Robinhood Chain only) ── */}
         <View style={{ marginTop: S.lg }}>
           <View style={cStyles.sectionHeaderRow}>
             <View
               style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
             >
               <Ionicons name="wallet-outline" size={18} color={COLORS.text} />
-              <Text style={cStyles.sectionTitle}>Your Base wallet</Text>
+              <Text style={cStyles.sectionTitle}>Your Robinhood wallet</Text>
             </View>
           </View>
           <View style={cStyles.walletStripCard}>
@@ -942,54 +984,13 @@ const walletStyles = (COLORS, F, S, insets) =>
       alignItems: "center",
     },
 
-    heroCard: {
-      borderRadius: 20,
-      padding: S.lg,
-      marginBottom: S.lg,
-    },
-    heroTop: {
+    chainRow: {
       flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-      marginBottom: S.sm,
+      gap: 6,
+      flexWrap: "wrap",
+      marginBottom: S.xl,
+      marginTop: S.xs,
     },
-    heroLabel: {
-      fontSize: F.sizes.sm,
-      color: COLORS.textTertiary,
-      fontWeight: "600",
-      textTransform: "uppercase",
-      letterSpacing: 1,
-    },
-    chainCountPill: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 5,
-      backgroundColor: COLORS.primary + "15",
-      paddingHorizontal: 10,
-      paddingVertical: 5,
-      borderRadius: 20,
-    },
-    activeChainDot: { width: 16, height: 16, borderRadius: 8 },
-    chainCountText: {
-      fontSize: F.sizes.xs,
-      color: COLORS.primary,
-      fontWeight: "700",
-    },
-    heroValue: {
-      fontSize: 42,
-      fontWeight: "800",
-      color: COLORS.text,
-      letterSpacing: -1,
-      marginBottom: 4,
-    },
-    heroChangeRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 5,
-      marginBottom: S.md,
-    },
-    heroChange: { fontSize: F.sizes.sm, fontWeight: "600" },
-    chainRow: { flexDirection: "row", gap: 6, flexWrap: "wrap" },
     chainPip: { width: 24, height: 24, borderRadius: 12 },
     chainPipActive: { borderWidth: 2, borderColor: COLORS.primary },
 
@@ -997,17 +998,16 @@ const walletStyles = (COLORS, F, S, insets) =>
       flexDirection: "row",
       justifyContent: "space-between",
       marginBottom: S.xl,
-      gap: 6,
+      gap: 10,
     },
-    actionPill: { flex: 1 },
-    actionIcon: {
+    actionTile: { flex: 1, alignItems: "center", gap: 6 },
+    actionIconCircle: {
+      width: 52,
+      height: 52,
+      borderRadius: 16,
       backgroundColor: COLORS.surface,
-      borderRadius: 8,
-      paddingVertical: 10,
-      paddingHorizontal: 6,
       alignItems: "center",
       justifyContent: "center",
-      gap: 5,
     },
     actionLabel: {
       fontSize: F.sizes.xs,
@@ -1172,6 +1172,37 @@ const walletStyles = (COLORS, F, S, insets) =>
       fontSize: F.sizes.xs,
       color: COLORS.textTertiary,
       fontWeight: "500",
+    },
+
+    tokenRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingLeft: 24,
+      paddingRight: 4,
+      paddingVertical: 10,
+    },
+    tokenIconWrap: { marginRight: S.md },
+    tokenIcon: { width: 30, height: 30, borderRadius: 15 },
+    tokenIconFallback: {
+      backgroundColor: COLORS.surface,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    tokenIconFallbackText: {
+      fontSize: F.sizes.xs,
+      fontWeight: "700",
+      color: COLORS.textSecondary,
+    },
+    tokenName: {
+      fontSize: F.sizes.sm,
+      fontWeight: "600",
+      color: COLORS.text,
+    },
+    tokensLoadingHint: {
+      fontSize: F.sizes.xs,
+      color: COLORS.textTertiary,
+      textAlign: "center",
+      paddingVertical: S.sm,
     },
   });
 

@@ -8,8 +8,10 @@ import {
   ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWallet } from '../../contexts/WalletContext';
 import { useLoading } from '../../contexts/LoadingContext';
+import { useAuth } from '../../contexts/AuthContext';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
 import Card from '../../components/common/Card';
@@ -19,12 +21,32 @@ import { useTheme } from '../../contexts/ThemeContext';
 const UnlockWalletScreen = ({ navigation }) => {
   const { unlockWalletFromFirestore, loading } = useWallet();
   const { showLoading, updateLoading, hideLoading } = useLoading();
+  const { hasPasswordProvider } = useAuth();
   const { COLORS, SPACING, FONTS } = useTheme();
+  const insets = useSafeAreaInsets();
+
+  // Google-only accounts have no Firebase password — the cloud wallet is
+  // instead protected by a separately-set Wallet Backup Password (see
+  // components/wallet/WalletBackupPasswordForm.js, used at creation time).
+  // unlockWalletFromFirestore(password) itself is identical either way;
+  // only the copy needs to say the right thing so the user doesn't try
+  // typing their Google password here.
+  const passwordLabel = hasPasswordProvider ? 'Account Password' : 'Wallet Backup Password';
+  const headerSubtitle = hasPasswordProvider
+    ? 'Enter your account password to restore your wallet'
+    : 'Enter the Wallet Backup Password you set when this wallet was created';
+  const infoText = hasPasswordProvider
+    ? 'We found your encrypted wallet in the cloud. Enter your account password to decrypt and restore it.'
+    : "We found your encrypted wallet in the cloud. Enter the Wallet Backup Password you set (not your Google password) to decrypt and restore it.";
+  const helpText = hasPasswordProvider
+    ? '• Use the same password as your account\n• Your wallet is encrypted for security\n• Your recovery phrase is stored encrypted'
+    : "• This is the backup password you set for this wallet, not your Google password\n• Your wallet is encrypted for security\n• Your recovery phrase is stored encrypted";
 
   const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+    paddingTop: insets.top,
   },
   scrollContent: {
     flexGrow: 1,
@@ -169,7 +191,7 @@ const UnlockWalletScreen = ({ navigation }) => {
           </View>
           <Text style={styles.title}>Unlock Your Wallet</Text>
           <Text style={styles.subtitle}>
-            Enter your account password to restore your wallet
+            {headerSubtitle}
           </Text>
         </View>
 
@@ -178,14 +200,14 @@ const UnlockWalletScreen = ({ navigation }) => {
           <View style={styles.infoContent}>
             <Text style={styles.infoTitle}>Wallet Found</Text>
             <Text style={styles.infoText}>
-              We found your encrypted wallet in the cloud. Enter your account password to decrypt and restore it.
+              {infoText}
             </Text>
           </View>
         </Card>
 
         <View style={styles.form}>
           <Input
-            label="Account Password"
+            label={passwordLabel}
             value={password}
             onChangeText={(text) => {
               setPassword(text);
@@ -211,9 +233,7 @@ const UnlockWalletScreen = ({ navigation }) => {
         <View style={styles.helpSection}>
           <Text style={styles.helpTitle}>Need Help?</Text>
           <Text style={styles.helpText}>
-            • Use the same password as your account{'\n'}
-            • Your wallet is encrypted for security{'\n'}
-            • Your recovery phrase is stored encrypted
+            {helpText}
           </Text>
         </View>
 

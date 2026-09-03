@@ -1,12 +1,11 @@
 // utils/alchemy.js
 import { Alchemy, Network } from "alchemy-sdk";
 
-const ALCHEMY_API_KEY = "HbuLjJ4P7DfTF8UQBKwMY";
+const ALCHEMY_API_KEY = "DNSsO2xFxmfxk92qoGfS1";
 
-// Map chain IDs to Alchemy Networks — Base mainnet + testnet only
+// Map chain IDs to Alchemy Networks — Base mainnet only
 export const ALCHEMY_NETWORK_MAP = {
   8453: Network.BASE_MAINNET,
-  84532: Network.BASE_SEPOLIA,
 };
 
 // Cache for Alchemy instances

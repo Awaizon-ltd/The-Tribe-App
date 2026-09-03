@@ -234,7 +234,6 @@ class CoinGeckoService {
       25: 'cronos',
       // Testnets (CoinGecko doesn't have testnet data)
       11155111: 'ethereum', // Sepolia
-      84532: 'base', // Base Sepolia
       80001: 'polygon-pos', // Mumbai
     };
 

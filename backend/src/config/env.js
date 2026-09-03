@@ -34,9 +34,21 @@ const schema = z.object({
   // 0x Protocol
   ZERO_EX_API_KEY: z.string().optional(),
 
+  // LI.FI (cross-chain swap/bridge aggregator)
+  LIFI_API_KEY:     z.string().optional(),
+  LIFI_INTEGRATOR:  z.string().default('nexus'),
+  LIFI_FEE_ENABLED: z.coerce.boolean().default(false),
+
+  // CoinGecko (market-data proxy) — free tier needs no key; set this to
+  // switch the proxy to pro-api.coingecko.com with a paid key later.
+  COINGECKO_API_KEY: z.string().optional(),
+
+  // Mini-app platform
+  ADMIN_UIDS: z.string().optional(), // comma-separated Firebase UIDs allowed to review submissions
+
   // Blockchain
   VOUCHER_SIGNER_KEY: z.string().optional(),
-  CHAIN_ID:           z.coerce.number().default(84532),
+  CHAIN_ID:           z.coerce.number().default(46630),
 
   FACTORY_ADDRESS_BASE:         z.string().default('0x0000000000000000000000000000000000000000'),
   FACTORY_ADDRESS_BASE_SEPOLIA: z.string().default('0x0000000000000000000000000000000000000000'),

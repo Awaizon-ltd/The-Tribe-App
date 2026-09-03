@@ -1,7 +1,7 @@
 // utils/blockchain/Alchemy.js
 import { Alchemy, Network } from "alchemy-sdk";
 
-const ALCHEMY_API_KEY = "HbuLjJ4P7DfTF8UQBKwMY";
+const ALCHEMY_API_KEY = "DNSsO2xFxmfxk92qoGfS1";
 
 /**
  * Chain ID → Alchemy Network enum.
@@ -13,7 +13,6 @@ export const ALCHEMY_NETWORK_MAP = {
   137: Network.MATIC_MAINNET,   // Polygon
   42161: Network.ARB_MAINNET,   // Arbitrum One
   8453: Network.BASE_MAINNET,   // Base
-  84532: Network.BASE_SEPOLIA,  // Base Sepolia (testnet)
   // Avalanche (43114) is NOT in the Alchemy SDK Network enum;
   // callers that need Alchemy features should check isAlchemySupported() first.
 };

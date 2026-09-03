@@ -429,7 +429,7 @@ const NFTScreen = ({ navigation }) => {
         onPress={() => setSelectedChainFilter(chain?.id || null)}
       >
         {chain?.icon && (
-          <Image source={{ uri: chain.icon }} style={styles.filterChainIcon} />
+          <Image source={typeof chain.icon === "string" ? { uri: chain.icon } : chain.icon} style={styles.filterChainIcon} />
         )}
         <Text
           style={[

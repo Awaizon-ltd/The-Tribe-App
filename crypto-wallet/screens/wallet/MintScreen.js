@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { ethers } from "ethers";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useUserData } from "../../contexts/UserDataContext";
 import { useWallet } from "../../contexts/WalletContext";
@@ -111,14 +112,14 @@ const MintScreen = ({ navigation }) => {
           <Ionicons name="warning-outline" size={52} color={COLORS.warning} />
           <Text style={styles.stateTitle}>Wrong Network</Text>
           <Text style={styles.stateSubtitle}>
-            TRIBE minting is available on Base Sepolia (testnet) and Base Mainnet.
+            TRIBE minting is available on Robinhood Chain Testnet and Robinhood Chain.
             Please switch your network.
           </Text>
           <TouchableOpacity
             style={[styles.primaryButton, { marginTop: SPACING.lg }]}
-            onPress={() => switchChainById(84532)}
+            onPress={() => switchChainById(46630)}
           >
-            <Text style={styles.primaryButtonText}>Switch to Base Sepolia</Text>
+            <Text style={styles.primaryButtonText}>Switch to Robinhood Testnet</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -225,7 +226,7 @@ const MintScreen = ({ navigation }) => {
             >
               <Ionicons name="open-outline" size={16} color={COLORS.primary} />
               <Text style={styles.explorerLinkText}>
-                View on {activeChain.id === 84532 ? "Sepolia " : ""}Basescan
+                View on {activeChain.id === 46630 ? "Testnet " : ""}Blockscout
               </Text>
             </TouchableOpacity>
           )}
@@ -290,7 +291,7 @@ const MintScreen = ({ navigation }) => {
           />
           <InfoRow
             icon="wallet-outline"
-            text={`Mint fee: ${WSYN_MINT_FEE_ETH} ETH (covers the gas cost on Base)`}
+            text={`Mint fee: ${WSYN_MINT_FEE_ETH} ETH (covers the gas cost on Robinhood Chain)`}
             COLORS={COLORS}
             styles={styles}
           />
@@ -343,8 +344,10 @@ const MintScreen = ({ navigation }) => {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-const Header = ({ title, onBack, COLORS, styles }) => (
-  <View style={styles.header}>
+const Header = ({ title, onBack, COLORS, styles }) => {
+  const insets = useSafeAreaInsets();
+  return (
+  <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
     {onBack ? (
       <TouchableOpacity onPress={onBack} style={styles.backButton}>
         <Ionicons name="arrow-back" size={22} color={COLORS.text} />
@@ -355,7 +358,8 @@ const Header = ({ title, onBack, COLORS, styles }) => (
     <Text style={styles.headerTitle}>{title}</Text>
     <View style={styles.backButton} />
   </View>
-);
+  );
+};
 
 const InfoRow = ({ icon, text, warn, COLORS, styles }) => (
   <View style={styles.infoRow}>

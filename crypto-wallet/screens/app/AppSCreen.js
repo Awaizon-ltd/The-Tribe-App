@@ -30,18 +30,18 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useWallet } from "../../contexts/WalletContext";
 import { useAuth } from "../../contexts/AuthContext";
-import api from "../../services/GuildApiService";
+import api from "../../services/TribeApiService";
 import MiniAppWebView from "../../components/miniapps/MiniAppsWebView";
 
 const SCOPE_META = {
   wallet:  { icon: "wallet-outline",       label: "Wallet" },
-  guild:   { icon: "people-outline",       label: "Guild" },
+  tribe:   { icon: "people-outline",       label: "Tribe" },
   posts:   { icon: "chatbubble-outline",   label: "Posts" },
   profile: { icon: "person-outline",       label: "Profile" },
 };
 
 const AppScreen = () => {
-  const { COLORS, FONTS, SPACING, BORDER_RADIUS } = useTheme();
+  const { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } = useTheme();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { address } = useWallet();
@@ -86,6 +86,8 @@ const AppScreen = () => {
 
   const featured = useMemo(() => apps.filter((a) => a.featured), [apps]);
 
+  const playLabel = (app) => (app.category === "games" ? "PLAY" : "OPEN");
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return apps.filter((a) => {
@@ -98,7 +100,7 @@ const AppScreen = () => {
     });
   }, [apps, activeCategory, query]);
 
-  const styles = createStyles(COLORS, FONTS, SPACING, BORDER_RADIUS);
+  const styles = createStyles(COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS);
 
   // ── Full-screen mini-app ─────────────────────────────────────────────────
   if (activeApp) {
@@ -119,7 +121,7 @@ const AppScreen = () => {
         </View>
         <MiniAppWebView
           miniApp={activeApp}
-          guildId={null}
+          tribeId={null}
           grantedScopes={activeApp.requestedScopes || activeApp.scopes || []}
           userProfile={{ username: user?.email?.split("@")[0], address }}
           onClose={closeApp}
@@ -141,7 +143,7 @@ const AppScreen = () => {
         <View style={styles.headerRow}>
           <Text style={styles.title}>App Store</Text>
         </View>
-        <Text style={styles.subtitle}>Mini-apps that run on your wallet and guilds.</Text>
+        <Text style={styles.subtitle}>Mini-apps that run on your wallet and tribes.</Text>
 
         {/* ── Search ── */}
         <View style={styles.searchBar}>
@@ -167,7 +169,7 @@ const AppScreen = () => {
           <View style={styles.placeholderCard}>
             <Ionicons name="apps-outline" size={22} color={COLORS.textTertiary} />
             <Text style={styles.placeholderTitle}>No mini-apps yet</Text>
-            <Text style={styles.placeholderBody}>Apps built for your wallet and guilds will show up here.</Text>
+            <Text style={styles.placeholderBody}>Apps built for your wallet and tribes will show up here.</Text>
           </View>
         ) : (
           <>
@@ -187,10 +189,20 @@ const AppScreen = () => {
                       onPress={() => openApp(app)}
                       activeOpacity={0.85}
                     >
-                      <LinearGradient
-                        colors={[COLORS.card, COLORS.surface]}
-                        style={StyleSheet.absoluteFill}
-                      />
+                      {app.bannerUrl ? (
+                        <Image source={{ uri: app.bannerUrl }} style={styles.featuredBanner} />
+                      ) : (
+                        <LinearGradient
+                          colors={[COLORS.card, COLORS.surface]}
+                          style={StyleSheet.absoluteFill}
+                        />
+                      )}
+                      {app.bannerUrl && (
+                        <LinearGradient
+                          colors={["transparent", COLORS.card]}
+                          style={styles.featuredBannerFade}
+                        />
+                      )}
                       <View style={styles.featuredIconWrap}>
                         {app.icon ? (
                           <Image source={{ uri: app.icon }} style={styles.featuredIcon} />
@@ -206,7 +218,12 @@ const AppScreen = () => {
                       )}
                       <ScopePills scopes={app.scopes} COLORS={COLORS} FONTS={FONTS} />
                       <View style={styles.featuredOpenBtn}>
-                        <Text style={styles.featuredOpenText}>OPEN</Text>
+                        <Ionicons
+                          name={app.category === "games" ? "play" : "arrow-forward"}
+                          size={11}
+                          color={COLORS.onPrimary}
+                        />
+                        <Text style={styles.featuredOpenText}>{playLabel(app)}</Text>
                       </View>
                     </TouchableOpacity>
                   ))}
@@ -267,7 +284,14 @@ const AppScreen = () => {
                     </View>
 
                     <View style={styles.rowMid}>
-                      <Text style={styles.rowName} numberOfLines={1}>{app.name}</Text>
+                      <View style={styles.rowNameRow}>
+                        <Text style={styles.rowName} numberOfLines={1}>{app.name}</Text>
+                        {app.installCount > 50 && (
+                          <View style={styles.popularBadge}>
+                            <Ionicons name="flame" size={9} color={COLORS.primary} />
+                          </View>
+                        )}
+                      </View>
                       {!!app.tagline && (
                         <Text style={styles.rowTagline} numberOfLines={1}>{app.tagline}</Text>
                       )}
@@ -275,7 +299,7 @@ const AppScreen = () => {
                     </View>
 
                     <View style={styles.rowOpenBtn}>
-                      <Text style={styles.rowOpenText}>OPEN</Text>
+                      <Text style={styles.rowOpenText}>{playLabel(app)}</Text>
                     </View>
                   </TouchableOpacity>
                 ))}
@@ -290,7 +314,7 @@ const AppScreen = () => {
 
 // ─── Scope pills ────────────────────────────────────────────────────────────
 // The signature element: a compact readout of what a mini-app can actually
-// touch (wallet, guild, posts, profile), shown right on the tile — the
+// touch (wallet, tribe, posts, profile), shown right on the tile — the
 // trust signal that matters for a wallet-connected store, in place of a
 // generic star rating these apps have no real basis for yet.
 const ScopePills = ({ scopes, COLORS, FONTS, compact = false }) => {
@@ -317,7 +341,7 @@ const ScopePills = ({ scopes, COLORS, FONTS, compact = false }) => {
   );
 };
 
-const createStyles = (COLORS, FONTS, SPACING, BORDER_RADIUS) =>
+const createStyles = (COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS) =>
   StyleSheet.create({
     container: { flex: 1 },
 
@@ -345,9 +369,17 @@ const createStyles = (COLORS, FONTS, SPACING, BORDER_RADIUS) =>
     // Featured carousel
     featuredRow: { paddingHorizontal: 20, gap: 12, paddingBottom: 28 },
     featuredCard: {
-      width: 210, borderRadius: BORDER_RADIUS.xl, padding: 16,
+      width: 210, minHeight: 200, borderRadius: BORDER_RADIUS.xl, padding: 16,
       borderWidth: StyleSheet.hairlineWidth, borderColor: COLORS.border,
       overflow: "hidden",
+      ...SHADOWS.small,
+    },
+    featuredBanner: {
+      ...StyleSheet.absoluteFillObject,
+      opacity: 0.55,
+    },
+    featuredBannerFade: {
+      position: "absolute", left: 0, right: 0, bottom: 0, height: "65%",
     },
     featuredIconWrap: {
       width: 48, height: 48, borderRadius: BORDER_RADIUS.md,
@@ -358,10 +390,10 @@ const createStyles = (COLORS, FONTS, SPACING, BORDER_RADIUS) =>
     featuredName: { fontSize: FONTS.sizes.md, fontWeight: "700", color: COLORS.text },
     featuredTagline: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, marginTop: 2, lineHeight: 16 },
     featuredOpenBtn: {
-      marginTop: 12, backgroundColor: COLORS.primary, borderRadius: BORDER_RADIUS.full,
-      paddingVertical: 8, alignItems: "center",
+      flexDirection: "row", gap: 5, marginTop: 12, backgroundColor: COLORS.primary,
+      borderRadius: BORDER_RADIUS.full, paddingVertical: 8, alignItems: "center", justifyContent: "center",
     },
-    featuredOpenText: { fontSize: FONTS.sizes.xs, fontWeight: "800", color: COLORS.background, letterSpacing: 0.5 },
+    featuredOpenText: { fontSize: FONTS.sizes.xs, fontWeight: "800", color: COLORS.onPrimary, letterSpacing: 0.5 },
 
     // Category chips
     categoryRow: { paddingHorizontal: 20, gap: 8, paddingBottom: 20 },
@@ -371,7 +403,7 @@ const createStyles = (COLORS, FONTS, SPACING, BORDER_RADIUS) =>
     },
     categoryChipActive: { backgroundColor: COLORS.primary },
     categoryChipText: { fontSize: FONTS.sizes.sm, fontWeight: "600", color: COLORS.textSecondary },
-    categoryChipTextActive: { color: COLORS.background },
+    categoryChipTextActive: { color: COLORS.onPrimary },
 
     // List rows
     list: { paddingHorizontal: 20 },
@@ -387,7 +419,13 @@ const createStyles = (COLORS, FONTS, SPACING, BORDER_RADIUS) =>
     },
     rowIcon: { width: 52, height: 52 },
     rowMid: { flex: 1, marginRight: 10 },
+    rowNameRow: { flexDirection: "row", alignItems: "center", gap: 5 },
     rowName: { fontSize: FONTS.sizes.md, fontWeight: "700", color: COLORS.text },
+    popularBadge: {
+      width: 16, height: 16, borderRadius: 8,
+      backgroundColor: `${COLORS.primary}20`,
+      alignItems: "center", justifyContent: "center",
+    },
     rowTagline: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, marginTop: 2 },
     rowOpenBtn: {
       backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.full,

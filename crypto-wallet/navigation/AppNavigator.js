@@ -41,21 +41,24 @@ import BrowserScreen from "../screens/wallet/DappBrowserScreen";
 import SwapScreen from "../screens/swap/SwapNewSCreen";
 import MintScreen from "../screens/wallet/MintScreen";
 import ReferFriendsScreen from "../screens/community/ReferFriendsScreen";
+import MarketsScreen from "../screens/wallet/MarketsScreen";
+import SearchScreen from "../screens/wallet/SearchScreen";
 
 import ProfileDrawerContent from "../components/navigation/ProfileDrawerContent";
-import GuildListScreen       from "../screens/guilds/GuildListScreen";
-import GuildInviteScreen     from "../screens/guilds/GuildInviteScreen";
-import GuildDetailsScreen    from "../screens/guilds/GuildDetailsScreen";
-import CreateGuildScreen     from "../screens/guilds/CreateGuildScreen";
-import SearchGuildScreen     from "../screens/guilds/SearchGuildScreen";
-import GuildChatScreen       from "../screens/guilds/GuildChatScreen";
-import GuildPostScreen       from "../screens/guilds/GuildPostScreen";
-import GuildSettingsScreen   from "../screens/guilds/GuildSettingsScreen";
-import GuildGovernanceScreen from "../screens/guilds/GuildGovernanceScreen";
-import PostDetailScreen      from "../screens/guilds/PostDetailScreen";
+import WalletTabBar from "../components/navigation/WalletTabBar";
+import TribeListScreen       from "../screens/tribes/TribeListScreen";
+import TribeInviteScreen     from "../screens/tribes/TribeInviteScreen";
+import TribeDetailsScreen    from "../screens/tribes/TribeDetailsScreen";
+import CreateTribeScreen     from "../screens/tribes/CreateTribeScreen";
+import SearchTribeScreen     from "../screens/tribes/SearchTribeScreen";
+import TribeChatScreen       from "../screens/tribes/TribeChatScreen";
+import TribePostScreen       from "../screens/tribes/TribePostScreen";
+import TribeSettingsScreen   from "../screens/tribes/TribeSettingsScreen";
+import TribeGovernanceScreen from "../screens/tribes/TribeGovernanceScreen";
+import PostDetailScreen      from "../screens/tribes/PostDetailScreen";
 import ActivityFeedScreen    from "../screens/feed/ActivityFeedScreen";
 import { StatusBar } from "expo-status-bar";
-import GuildAppsScreen from "../screens/guilds/GuildAppsScreen";
+import TribeAppsScreen from "../screens/tribes/TribeAppsScreen";
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -109,44 +112,46 @@ const makeTabOptions = (COLORS, FONTS, insets, isDark) => ({
 });
 
 // ─── Wallet Mode Tabs ─────────────────────────────────────────────────────
+// Custom floating pill bar (WalletTabBar) instead of makeTabOptions' default
+// full-width bar — community mode keeps that default, unchanged, below.
+// Each Tab.Screen's icon is read by WalletTabBar via the custom
+// `tabBarIconName` option (a plain glyph-name string) rather than React
+// Navigation's usual `tabBarIcon` render prop, since the custom bar renders
+// every slot itself.
 
 const WalletTabs = () => {
-  const { COLORS, FONTS, isDark } = useTheme();
-  const insets = useSafeAreaInsets();
-
-  const tabIcon = (name, focused) => (
-    <Ionicons name={focused ? name : `${name}-outline`} size={22} color={focused ? COLORS.primary : COLORS.textTertiary} />
-  );
-
   return (
-    <Tab.Navigator screenOptions={makeTabOptions(COLORS, FONTS, insets, isDark)}>
+    <Tab.Navigator
+      screenOptions={{ headerShown: false }}
+      tabBar={(props) => <WalletTabBar {...props} />}
+    >
       <Tab.Screen
         name="WalletTab"
         component={HomeScreen}
-        options={{ tabBarLabel: "Wallet", tabBarIcon: ({ focused }) => tabIcon("wallet", focused) }}
+        options={{ tabBarIconName: "home" }}
+      />
+      <Tab.Screen
+        name="MarketsTab"
+        component={MarketsScreen}
+        options={{ tabBarIconName: "stats-chart" }}
       />
       <Tab.Screen
         name="SwapTab"
         component={SwapScreen}
-        options={{ tabBarLabel: "Swap", tabBarIcon: ({ focused }) => tabIcon("repeat", focused) }}
-      />
-      <Tab.Screen
-        name="ActivityTab"
-        component={TransactionsScreen}
-        options={{ tabBarLabel: "Activity", tabBarIcon: ({ focused }) => tabIcon("time", focused) }}
+        options={{ tabBarIconName: "swap-horizontal" }}
       />
       <Tab.Screen
         name="ExploreTab"
         component={BrowserScreen}
-        options={{ tabBarLabel: "Browser", tabBarIcon: ({ focused }) => tabIcon("compass", focused) }}
+        options={{ tabBarIconName: "compass" }}
       />
     </Tab.Navigator>
   );
 };
 
 // ─── Community Mode Tabs ─────────────────────────────────────────────────────
-//   Guilds · DAOs · Feed (center) · App · Wallet
-//   Feed and Guilds get the Twitter-style centered-logo header.
+//   Tribes · DAOs · Feed (center) · App · Wallet
+//   Feed and Tribes get the Twitter-style centered-logo header.
 
 const CommunityTabs = () => {
   const { COLORS, FONTS, isDark } = useTheme();
@@ -173,12 +178,12 @@ const CommunityTabs = () => {
         })}
       />
 
-      {/* Guilds — Twitter-style header */}
+      {/* Tribes — Twitter-style header */}
       <Tab.Screen
-        name="GuildsTab"
-        component={GuildListScreen}
+        name="TribesTab"
+        component={TribeListScreen}
         options={({ navigation }) => ({
-          tabBarLabel: "Guilds",
+          tabBarLabel: "Tribes",
           tabBarIcon: ({ focused }) => tabIcon("people", focused),
           headerShown: false,
         })}
@@ -280,13 +285,13 @@ const MainStack = () => {
       <Stack.Screen name="ArticleDetail" component={ArticleDetailScreen} options={pushOptions} />
       <Stack.Screen name="Browser" component={BrowserScreen} options={pushOptions} />
       <Stack.Screen name="ActivityFeed" component={ActivityFeedScreen} options={pushOptions} />
-      <Stack.Screen name="GuildDetail" component={GuildDetailsScreen} options={pushOptions} />
+      <Stack.Screen name="TribeDetail" component={TribeDetailsScreen} options={pushOptions} />
       <Stack.Screen name="PostDetail" component={PostDetailScreen} options={{ ...pushOptions, headerShown: false }} />
-      <Stack.Screen name="GuildChat" component={GuildChatScreen} options={{ ...pushOptions, headerShown: false }} />
-      <Stack.Screen name="GuildPosts" component={GuildPostScreen} options={{ ...pushOptions, headerShown: false }} />
-      <Stack.Screen name="GuildGovernance" component={GuildGovernanceScreen} options={{ ...pushOptions, headerShown: false }} />
-      <Stack.Screen name="GuildSettings" component={GuildSettingsScreen} options={{ ...pushOptions, headerShown: false }} />
-      <Stack.Screen name="SearchGuild" component={SearchGuildScreen} options={pushOptions} />
+      <Stack.Screen name="TribeChat" component={TribeChatScreen} options={{ ...pushOptions, headerShown: false }} />
+      <Stack.Screen name="TribePosts" component={TribePostScreen} options={{ ...pushOptions, headerShown: false }} />
+      <Stack.Screen name="TribeGovernance" component={TribeGovernanceScreen} options={{ ...pushOptions, headerShown: false }} />
+      <Stack.Screen name="TribeSettings" component={TribeSettingsScreen} options={{ ...pushOptions, headerShown: false }} />
+      <Stack.Screen name="SearchTribe" component={SearchTribeScreen} options={pushOptions} />
       <Stack.Screen name="ReferFriends" component={ReferFriendsScreen} options={pushOptions} />
 
       {/* ── Action modals ── */}
@@ -298,9 +303,10 @@ const MainStack = () => {
       <Stack.Screen name="CreateProposal" component={CreateProposalForm} options={actionModalOptions} />
       <Stack.Screen name="LaunchDAO" component={LaunchDAOScreen} options={actionModalOptions} />
       <Stack.Screen name="NFTSend" component={NFTSendScreen} options={actionModalOptions} />
-      <Stack.Screen name="CreateGuild" component={CreateGuildScreen} options={actionModalOptions} />
-      <Stack.Screen name="GuildInvite" component={GuildInviteScreen} options={actionModalOptions} />
-      <Stack.Screen name="GuildApps" component={GuildAppsScreen} options={{ ...pushOptions, headerShown: false }} />
+      <Stack.Screen name="CreateTribe" component={CreateTribeScreen} options={actionModalOptions} />
+      <Stack.Screen name="TribeInvite" component={TribeInviteScreen} options={actionModalOptions} />
+      <Stack.Screen name="TribeApps" component={TribeAppsScreen} options={{ ...pushOptions, headerShown: false }} />
+      <Stack.Screen name="Search" component={SearchScreen} options={actionModalOptions} />
 
       {/* ── Security-sensitive, locked flows ── */}
       <Stack.Screen name="RecoveryPhrase" component={RecoveryPhraseScreen} options={lockedModalOptions} />

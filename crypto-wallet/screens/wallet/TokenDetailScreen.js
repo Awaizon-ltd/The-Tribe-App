@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LineChart } from 'react-native-chart-kit';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../contexts/ThemeContext'; // Adjust path as needed
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
@@ -26,6 +27,7 @@ const { width } = Dimensions.get('window');
 const TokenDetailScreen = ({ route, navigation }) => {
   const theme = useTheme();
   const styles = createStyles(theme);
+  const insets = useSafeAreaInsets();
   const { chain, balance, usdValue, price, priceChange24h, walletAddress } =
     route.params;
 
@@ -134,12 +136,12 @@ const TokenDetailScreen = ({ route, navigation }) => {
     <View style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Header */}
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
           <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={theme.COLORS.text} />
           </Pressable>
           <View style={styles.headerInfo}>
-            <Image source={{ uri: chain.icon }} style={styles.tokenIcon} />
+            <Image source={typeof chain.icon === "string" ? { uri: chain.icon } : chain.icon} style={styles.tokenIcon} />
             <View style={styles.headerText}>
               <Text style={styles.tokenName}>{chain.name}</Text>
               <Text style={styles.tokenSymbol}>{chain.symbol}</Text>

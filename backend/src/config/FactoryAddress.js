@@ -43,6 +43,19 @@ export const FACTORY_ADDRESSES = {
     address: "0x4B3AD106552927494E0DB019170c1E5d4E5D08Eb",
   },
 
+  ROBINHOOD: {
+    chainId: 4663,
+    // Same address as BASE above — confirm this was a deterministic/CREATE2
+    // deployment (same bytecode+salt+deployer on every chain) before relying
+    // on it in production; otherwise this may not be the right contract.
+    address: "0x38D64ef112d7d840667CfBc268179eE410403A94",
+  },
+
+  ROBINHOOD_TESTNET: {
+    chainId: 46630,
+    address: "0x38D64ef112d7d840667CfBc268179eE410403A94",
+  },
+
   // ABSTRACT: {
   //   chainId: 2741,
   //   address: null, // Deploy factory here

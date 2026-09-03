@@ -24,7 +24,6 @@ export const CHAIN_COINGECKO_MAP = {
   42161: 'ethereum',    // Arbitrum (ETH)
   43114: 'avalanche-2', // Avalanche
   8453: 'ethereum',     // Base (ETH)
-  84532: 'ethereum',    // Base Sepolia (ETH)
   999: 'hyperliquid',   // HyperEVM
 };
 

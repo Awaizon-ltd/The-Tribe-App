@@ -24,6 +24,7 @@
 //   • Guild-member bonus applied client-side for privacy
 import { getMongoDB } from '../db/mongodb.js';
 import guildDb      from './guildDbService.js';
+import guildMongo   from './guildMongoService.js';
 import logger       from '../utils/logger.js';
 
 // ─── Reaction weights ─────────────────────────────────────────────────────────
@@ -110,30 +111,22 @@ export async function getActivityFeed(_userId, { page = 1, limit = 20 } = {}) {
     const guilds = await guildDb.getGuildsByIds(uniqueGuildIds);
     const guildMap = Object.fromEntries(guilds.map(g => [g.id, g]));
 
+    // Base shape comes from guildMongoService's formatPost — the same
+    // normalizer GET /guilds/:guildId/posts and the post-detail screen use —
+    // so a field added there (impressionCount was missing here before this
+    // fix) shows up in every screen that renders a post, not just some.
+    // Feed-specific fields (guild metadata, live score) layer on top.
     const enriched = docs.map(doc => {
-      const guild     = guildMap[doc.guildId] || {};
-      const liveScore = computeVisibilityScore(doc);
+      const guild = guildMap[doc.guildId] || {};
       return {
-        id:             doc._id.toString(),
-        guildId:        doc.guildId,
-        guildName:      guild.name      || 'Unknown Guild',
-        guildLogoUrl:   guild.logo_url  || guild.logoUrl || null,
-        userId:         doc.userId,
-        username:       doc.username,
-        userAvatar:     doc.userAvatar  || null,
-        description:    doc.description,
-        imageUrl:       doc.imageUrl    || null,
-        reactionCounts: doc.reactionCounts || {},
-        commentsCount:  doc.commentsCount  || 0,
-        repostCount:    doc.repostCount    || 0,
-        uniqueReactors: doc.uniqueReactors || 0,
-        isRepost:       doc.isRepost       || false,
-        originalPostId: doc.originalPostId || null,
-        originalAuthor: doc.originalAuthor || null,
-        repostComment:  doc.repostComment  || null,
-        visibilityScore: liveScore,
-        timestamp:      doc.timestamp,
-        createdAt:      doc.createdAt,
+        ...guildMongo.formatPost(doc),
+        guildName:       guild.name     || 'Unknown Guild',
+        guildLogoUrl:    guild.logo_url || guild.logoUrl || null,
+        isRepost:        doc.isRepost       || false,
+        originalPostId:  doc.originalPostId || null,
+        originalAuthor:  doc.originalAuthor || null,
+        repostComment:   doc.repostComment  || null,
+        visibilityScore: computeVisibilityScore(doc),
       };
     });
 
@@ -167,25 +160,13 @@ export async function pollActivityFeed(_userId, since) {
     return docs.map(doc => {
       const guild = guildMap[doc.guildId] || {};
       return {
-        id:             doc._id.toString(),
-        guildId:        doc.guildId,
-        guildName:      guild.name     || 'Unknown Guild',
-        guildLogoUrl:   guild.logo_url || guild.logoUrl || null,
-        userId:         doc.userId,
-        username:       doc.username,
-        userAvatar:     doc.userAvatar || null,
-        description:    doc.description,
-        imageUrl:       doc.imageUrl   || null,
-        reactionCounts: doc.reactionCounts || {},
-        commentsCount:  doc.commentsCount  || 0,
-        repostCount:    doc.repostCount    || 0,
-        uniqueReactors: doc.uniqueReactors || 0,
-        isRepost:       doc.isRepost       || false,
-        originalPostId: doc.originalPostId || null,
-        originalAuthor: doc.originalAuthor || null,
+        ...guildMongo.formatPost(doc),
+        guildName:       guild.name     || 'Unknown Guild',
+        guildLogoUrl:    guild.logo_url || guild.logoUrl || null,
+        isRepost:        doc.isRepost       || false,
+        originalPostId:  doc.originalPostId || null,
+        originalAuthor:  doc.originalAuthor || null,
         visibilityScore: computeVisibilityScore(doc),
-        timestamp:      doc.timestamp,
-        createdAt:      doc.createdAt,
       };
     });
   } catch (err) {

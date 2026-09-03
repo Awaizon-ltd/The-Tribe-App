@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatUnits } from 'ethers';
 import { useTheme } from '../../contexts/ThemeContext'; // Adjust path as needed
 import Card from '../../components/common/Card';
@@ -29,6 +30,7 @@ import Alert from '../../utils/Alert';
 export function ProposalDetailScreen({ route, navigation }) {
   const theme = useTheme();
   const styles = createStyles(theme);
+  const insets = useSafeAreaInsets();
   const { proposal: initialProposal, daoAddress } = route.params;
   
   const {
@@ -219,7 +221,7 @@ export function ProposalDetailScreen({ route, navigation }) {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={theme.COLORS.text} />
         </TouchableOpacity>

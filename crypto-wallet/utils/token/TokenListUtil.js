@@ -1,14 +1,12 @@
 import { ARB_TOKENS } from "./arb";
 import { AVAX_TOKENS } from "./avax";
 import { BASE_TOKENS } from "./base";
-import { BASE_SEPOLIA_TOKENS } from "./base-sepolia";
 import { BNB_TOKENS } from "./bnb";
 import { POL_TOKENS } from "./pol";
 
 // Map of chain IDs to their token lists
 const CHAIN_TOKEN_LISTS = {
   8453:  BASE_TOKENS,         // Base Mainnet
-  84532: BASE_SEPOLIA_TOKENS, // Base Sepolia (testnet)
   // 1: ETHEREUM_TOKENS,
   137:   POL_TOKENS,
   42161: ARB_TOKENS,

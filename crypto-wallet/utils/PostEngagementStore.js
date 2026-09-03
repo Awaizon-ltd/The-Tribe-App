@@ -1,6 +1,6 @@
 // utils/PostEngagementStore.js
 // Module-level engagement store.
-// Lets useGuildPosts and useActivityFeed share like / reaction / comment
+// Lets useTribePosts and useActivityFeed share like / reaction / comment
 // state without a React context (avoids tree-wide re-renders).
 //
 // Both hooks publish patches here after every optimistic update.

@@ -211,7 +211,7 @@ const MyDAOsScreen = () => {
 
   const myTabHeader = (
     <TabHeader
-      title="My Guilds"
+      title="My Tribes"
       subtitle={`${totalMyDAOs} ${totalMyDAOs === 1 ? 'DAO' : 'DAOs'} · ${totalTokens} ${totalTokens === 1 ? 'Token' : 'Tokens'}`}
       border
       left={<UserIcon onPress={() => navigation.getParent('ProfileDrawer')?.openDrawer()} />}

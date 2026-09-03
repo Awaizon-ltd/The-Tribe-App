@@ -6,32 +6,37 @@ import * as Clipboard from "expo-clipboard";
 // DEEP LINKING CONFIGURATION
 // ============================================================================
 
+// Not currently imported anywhere (screens build invite URLs inline —
+// see components/tribe/TribeSettingComponents.js and TribeTabContent.js),
+// but kept correct rather than left as a landmine: prefix/domain must match
+// app.json's real scheme ("thetribe") and registered associatedDomains
+// ("sysfidao.com") or these links would silently fail to reopen the app.
 export const DeepLinks = {
   // Base configuration
-  PREFIX: "tribeapp://",
-  WEB_PREFIX: "https://thetribe.com",
+  PREFIX: "thetribe://",
+  WEB_PREFIX: "https://sysfidao.com",
 
   // Generate app deep links
-  invite: (inviteCode) => `tribeapp://invite/${inviteCode}`,
+  invite: (inviteCode) => `thetribe://invite/${inviteCode}`,
 
-  guild: (guildId) => `tribeapp://guild/${guildId}`,
+  tribe: (tribeId) => `thetribe://tribe/${tribeId}`,
 
   dao: (daoAddress, genre = null) =>
     genre
-      ? `tribeapp://dao/${daoAddress}/${genre}`
-      : `tribeapp://dao/${daoAddress}`,
+      ? `thetribe://dao/${daoAddress}/${genre}`
+      : `thetribe://dao/${daoAddress}`,
 
-  proposal: (proposalId) => `tribeapp://proposal/${proposalId}`,
+  proposal: (proposalId) => `thetribe://proposal/${proposalId}`,
 
-  profile: (userId) => `tribeapp://profile/${userId}`,
+  profile: (userId) => `thetribe://profile/${userId}`,
 
-  token: (tokenAddress) => `tribeapp://token/${tokenAddress}`,
+  token: (tokenAddress) => `thetribe://token/${tokenAddress}`,
 
   nft: (contractAddress, tokenId) =>
-    `tribeapp://nft/${contractAddress}/${tokenId}`,
+    `thetribe://nft/${contractAddress}/${tokenId}`,
 
   send: (tokenAddress, toAddress = null, amount = null) => {
-    let link = `tribeapp://wallet/send/${tokenAddress}`;
+    let link = `thetribe://wallet/send/${tokenAddress}`;
     if (toAddress) link += `/${toAddress}`;
     if (amount) link += `?amount=${amount}`;
     return link;
@@ -39,14 +44,14 @@ export const DeepLinks = {
 
   // Generate web links (for universal links/SEO)
   web: {
-    invite: (inviteCode) => `https://tribeapp.com/invite/${inviteCode}`,
-    guild: (guildId) => `https://tribeapp.com/guild/${guildId}`,
+    invite: (inviteCode) => `https://sysfidao.com/invite/${inviteCode}`,
+    tribe: (tribeId) => `https://sysfidao.com/tribe/${tribeId}`,
     dao: (daoAddress, genre = null) =>
       genre
-        ? `https://tribeapp.com/dao/${daoAddress}/${genre}`
-        : `https://tribeapp.com/dao/${daoAddress}`,
-    proposal: (proposalId) => `https://tribeapp.com/proposal/${proposalId}`,
-    profile: (userId) => `https://tribeapp.com/profile/${userId}`,
+        ? `https://sysfidao.com/dao/${daoAddress}/${genre}`
+        : `https://sysfidao.com/dao/${daoAddress}`,
+    proposal: (proposalId) => `https://sysfidao.com/proposal/${proposalId}`,
+    profile: (userId) => `https://sysfidao.com/profile/${userId}`,
   },
 };
 
@@ -105,19 +110,19 @@ export const shareDAO = async (
 };
 
 /**
- * Share Guild invite
+ * Share Tribe invite
  */
-export const shareGuildInvite = async (inviteCode, guildName) => {
+export const shareTribeInvite = async (inviteCode, tribeName) => {
   try {
     const deepLink = DeepLinks.invite(inviteCode);
     const webLink = DeepLinks.web.invite(inviteCode);
 
-    const message = `Join ${guildName} on tribeapp!\n\n${Platform.OS === "web" ? webLink : deepLink}`;
+    const message = `Join ${tribeName} on tribeapp!\n\n${Platform.OS === "web" ? webLink : deepLink}`;
 
     if (Platform.OS === "ios" || Platform.OS === "android") {
       await Share.share({
         message: message,
-        title: `Join ${guildName}`,
+        title: `Join ${tribeName}`,
         url: Platform.OS === "ios" ? deepLink : undefined,
       });
     } else {
@@ -134,31 +139,31 @@ export const shareGuildInvite = async (inviteCode, guildName) => {
 };
 
 /**
- * Share Guild
+ * Share Tribe
  */
-export const shareGuild = async (guildId, guildName) => {
+export const shareTribe = async (tribeId, tribeName) => {
   try {
-    const deepLink = DeepLinks.guild(guildId);
-    const webLink = DeepLinks.web.guild(guildId);
+    const deepLink = DeepLinks.tribe(tribeId);
+    const webLink = DeepLinks.web.tribe(tribeId);
 
-    const message = `Check out ${guildName} on tribeapp!\n\n${Platform.OS === "web" ? webLink : deepLink}`;
+    const message = `Check out ${tribeName} on tribeapp!\n\n${Platform.OS === "web" ? webLink : deepLink}`;
 
     if (Platform.OS === "ios" || Platform.OS === "android") {
       await Share.share({
         message: message,
-        title: guildName,
+        title: tribeName,
         url: Platform.OS === "ios" ? deepLink : undefined,
       });
     } else {
       await Clipboard.setStringAsync(webLink);
       Alert.alert(
         "Link Copied!",
-        "The guild link has been copied to your clipboard.",
+        "The tribe link has been copied to your clipboard.",
       );
     }
   } catch (error) {
-    console.error("Error sharing guild:", error);
-    Alert.alert("Error", "Unable to share guild. Please try again.");
+    console.error("Error sharing tribe:", error);
+    Alert.alert("Error", "Unable to share tribe. Please try again.");
   }
 };
 
@@ -325,18 +330,54 @@ export const copyToClipboard = async (text, successMessage = "Copied!") => {
 };
 
 /**
- * Format time ago (e.g., "2 hours ago")
+ * Pulls a numeric millisecond epoch out of a post/comment/message object.
+ * Every write path in this app stores `timestamp: Date.now()` (a plain
+ * number) — that's the canonical field. `createdAt` also exists on these
+ * documents, but it's a Mongo Date that arrives over JSON as an ISO
+ * *string*, not a number — passing it straight into ms arithmetic silently
+ * produces NaN or, worse, a `typeof x === 'number'` check that's always
+ * false and masks the bug behind a wrong-but-plausible-looking fallback
+ * (this is exactly how comments ended up permanently reading "Just now").
+ * Single source of truth for "what time did this actually happen" — use
+ * this instead of each screen guessing at the field/shape by hand.
  */
-export const formatTimeAgo = (timestamp) => {
-  const now = Math.floor(Date.now() / 1000);
-  const diff = now - timestamp;
+export const getEntityTimestamp = (entity) => {
+  if (!entity) return null;
+  if (typeof entity.timestamp === "number") return entity.timestamp;
+  if (typeof entity.createdAt === "number") return entity.createdAt;
+  if (entity.createdAt) {
+    const parsed = new Date(entity.createdAt).getTime();
+    if (!isNaN(parsed)) return parsed;
+  }
+  return null;
+};
 
-  if (diff < 60) return "Just now";
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
-  if (diff < 2592000) return `${Math.floor(diff / 604800)}w ago`;
-  return `${Math.floor(diff / 2592000)}mo ago`;
+/**
+ * Format time ago — "Just now" / "5m" / "3h" / "2d", then a calendar date
+ * once it's a week old. Expects a millisecond epoch — matching Date.now()
+ * and every `timestamp` field this app writes — not seconds. Pass a
+ * post/comment/message object through getEntityTimestamp() first if you're
+ * not already holding a raw number.
+ *
+ * This consolidates four near-identical hand-rolled copies (post cards, the
+ * feed, post detail, and comments each had their own) that had already
+ * drifted on the threshold for switching to a calendar date (24h in some,
+ * 7d in others) for no real reason — one behavior for every timestamp in
+ * the app now, not per-screen guesswork.
+ */
+export const formatTimeAgo = (timestampMs) => {
+  if (typeof timestampMs !== "number" || isNaN(timestampMs)) return "";
+  const diff = Math.max(Date.now() - timestampMs, 0);
+  const seconds = Math.floor(diff / 1000);
+
+  if (seconds < 60) return "Just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d`;
+  return new Date(timestampMs).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 };
 
 /**
@@ -469,8 +510,8 @@ export default {
 
   // Sharing
   shareDAO,
-  shareGuildInvite,
-  shareGuild,
+  shareTribeInvite,
+  shareTribe,
   shareProfile,
   shareProposal,
   createPaymentRequest,
@@ -480,6 +521,7 @@ export default {
   // Formatting
   formatAddress,
   formatTimeAgo,
+  getEntityTimestamp,
   formatNumber,
   formatTimeRemaining,
 

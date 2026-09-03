@@ -6,6 +6,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import ChainIcon from '../common/ChainIcon';
 import { SPACING, FONTS } from '../../constants/Theme';
 import { formatPriceChange } from '../../services/coingecko';
+import { isTestnetAllowedInProduction } from '../../constants/Chain';
 
 // Format numbers with thousand separators
 const formatNumber = (num, decimals = 2) => {
@@ -27,8 +28,9 @@ const AssetCard = ({ asset, onPress }) => {
     isZeroBalance,
   } = asset;
 
-  // Hide testnet assets in production
-  if (!__DEV__ && chain.testnet) {
+  // Hide testnet assets in production, except the allow-listed ones
+  // (currently Robinhood Chain Testnet, for Community mode).
+  if (!__DEV__ && chain.testnet && !isTestnetAllowedInProduction(chain.id)) {
     return null;
   }
 

@@ -1,0 +1,194 @@
+rules_version = '2';
+
+// ─────────────────────────────────────────────────────────────────────────
+// Firestore Security Rules — "the-tribe-community-app"
+//
+// Model: every document is private to the user who owns it, with two
+// deliberate public exceptions:
+//   1. `usernames/{username}` — GET only (no LIST), so the client can check
+//      "is this username taken" during signup, before the account exists.
+//   2. `tribes/{tribeId}` — GET only for tribes marked `privacy: "public"`,
+//      so tribe directories/search can work without membership.
+//
+// Everything else (profile data, wallets, support chats, tribe membership)
+// is readable/writable only by its owner (request.auth.uid). The backend
+// (Firebase Admin SDK, in backend/src/lib/firebase.js) bypasses these rules
+// entirely, so admin/server-side flows are unaffected.
+//
+// Reference: collections below were inventoried from actual client SDK
+// calls in crypto-wallet/services/Firebase.js, contexts/AuthContext.js,
+// contexts/UserDataContext.js, services/Tribeservice.js and screens/**.
+// ─────────────────────────────────────────────────────────────────────────
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helpers ──────────────────────────────────────────────────────────
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Fields that may change on `users/{uid}` update. Deliberately excludes
+    // uid, email, createdAt (immutable after create) and any legacy wallet
+    // fields (encryptedWallet/salt/walletAddress) — those must only ever be
+    // written through the dedicated `wallets/{uid}` collection below.
+    function userUpdateFieldsAllowed() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly([
+          'username', 'displayName', 'bio', 'profilePicture',
+          'profileImagePath', 'preferences', 'tribes',
+          'lastUsernameChange', 'emailVerified', 'updatedAt'
+        ]);
+    }
+
+    // emailVerified may only be flipped to match Firebase Auth's own claim
+    // for this session — never client-asserted true.
+    function emailVerifiedIsHonest() {
+      return !('emailVerified' in request.resource.data.diff(resource.data).affectedKeys())
+        || request.resource.data.emailVerified == request.auth.token.email_verified;
+    }
+
+    // ── users/{uid} — profile data. Legacy docs may still carry
+    //    encryptedWallet/salt/walletAddress from before the /wallets
+    //    migration, so this must NEVER be publicly readable.  ─────────────
+    match /users/{uid} {
+      allow read: if isOwner(uid);
+
+      allow create: if isOwner(uid)
+        && request.resource.data.uid == uid
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.keys().hasAll(['uid', 'email'])
+        && request.resource.data.keys().hasOnly([
+             'uid', 'email', 'username', 'displayName', 'bio',
+             'profilePicture', 'emailVerified', 'createdAt', 'updatedAt'
+           ]);
+
+      allow update: if isOwner(uid)
+        && userUpdateFieldsAllowed()
+        && emailVerifiedIsHonest();
+
+      allow delete: if isOwner(uid);
+    }
+
+    // ── usernames/{usernameLower} — uid -> username reverse index used for
+    //    uniqueness checks. Doc id is expected to already be lowercase.
+    //    GET is public (checkUsernameExists runs before the account exists
+    //    on the registration screen); LIST is blocked so the whole
+    //    username directory can't be scraped. ────────────────────────────
+    match /usernames/{usernameId} {
+      allow get: if true;
+      allow list: if false;
+
+      // Only ever created fresh (claiming an already-taken username is a
+      // Firestore *update*, which is denied below — so this doubles as the
+      // uniqueness guarantee) and only for yourself.
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid
+        && usernameId == usernameId.lower();
+
+      // Username docs are never edited in place — updateUsername() always
+      // deletes the old doc and creates a new one.
+      allow update: if false;
+
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    // ── wallets/{uid} — encrypted wallet blob. Strictly owner-only, no
+    //    exceptions, ever. ───────────────────────────────────────────────
+    match /wallets/{uid} {
+      allow read, write: if isOwner(uid);
+    }
+
+    // ── supportChats/{chatId} — 1:1 chat between a user and support.
+    //    Owner-only; there is no client-side admin/agent reader today
+    //    (support tooling goes through the Admin SDK on the backend, which
+    //    bypasses these rules). ──────────────────────────────────────────
+    match /supportChats/{chatId} {
+      allow read, update: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        function ownsChat() {
+          return isSignedIn()
+            && get(/databases/$(database)/documents/supportChats/$(chatId)).data.userId == request.auth.uid;
+        }
+
+        allow read, create: if ownsChat();
+
+        // markMessagesAsRead only ever flips `read` — nothing else.
+        allow update: if ownsChat()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+
+        allow delete: if false;
+      }
+    }
+
+    // ── tribes/{tribeId} — currently unused by the live app (tribe
+    //    read/write moved to the Mongo-backed backend API; see
+    //    services/TribeApiService.js), but ruled defensively in case older
+    //    data still lives here or the client path is revived. ────────────
+    match /tribes/{tribeId} {
+      function isTribeMember() {
+        return isSignedIn() && request.auth.uid in resource.data.members;
+      }
+
+      // Only the membership bookkeeping fields joinTribe()/leaveTribe()
+      // actually touch — never name, privacy, tokenGating, etc.
+      function membershipFieldsOnly() {
+        return request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['members', 'memberCount', 'updatedAt']);
+      }
+
+      // NOTE: `read` (not split get/list) so Firestore enforces this same
+      // privacy check per-document on `list` queries too — a caller can
+      // only list tribes if every returned doc satisfies it (in practice,
+      // this means list queries must filter on `where('privacy','==',
+      // 'public')`, matching fetchTopTribes()/searchTribes()).
+      allow read: if resource.data.privacy == 'public' || isTribeMember();
+
+      allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
+
+      // Owner can edit anything. A non-owner may only flip their own
+      // membership: joining (they appear in the *new* members list) or
+      // leaving (they were in the *old* members list) — nothing else.
+      allow update: if isSignedIn()
+        && (resource.data.createdBy == request.auth.uid
+            || (membershipFieldsOnly()
+                && (request.auth.uid in request.resource.data.members
+                    || request.auth.uid in resource.data.members)));
+
+      allow delete: if isSignedIn() && resource.data.createdBy == request.auth.uid;
+
+      match /members/{memberId} {
+        function parentTribe() {
+          return get(/databases/$(database)/documents/tribes/$(tribeId)).data;
+        }
+
+        allow read: if isSignedIn()
+          && (parentTribe().privacy == 'public' || parentTribe().createdBy == request.auth.uid
+              || request.auth.uid == memberId || exists(/databases/$(database)/documents/tribes/$(tribeId)/members/$(request.auth.uid)));
+
+        // Self-service join only.
+        allow create: if isOwner(memberId);
+
+        // Self-service leave, or removal by the tribe owner/a moderator.
+        allow delete: if isOwner(memberId)
+          || parentTribe().createdBy == request.auth.uid
+          || get(/databases/$(database)/documents/tribes/$(tribeId)/members/$(request.auth.uid)).data.status in ['owner', 'moderator'];
+
+        allow update: if false;
+      }
+    }
+
+    // ── Default deny — anything not explicitly matched above is closed. ──
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

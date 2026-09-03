@@ -13,6 +13,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWallet } from '../../contexts/WalletContext';
 import { useLoading } from '../../contexts/LoadingContext';
+// Google Sign-In disabled for now — email/password only. Re-enable by
+// uncommenting this import and the usages below (search "Google Sign-In").
+// import { useGoogleAuth } from '../../hooks/useGoogleAuth';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
 import { isValidEmail } from '../../utils/Validators';
@@ -28,7 +31,7 @@ const STEP = {
 const RADIUS = { md: 8, lg: 12, xl: 16, xxl: 28 };
 
 const LoginScreen = ({ navigation }) => {
-  const { login, loading: authLoading, user } = useAuth();
+  const { login, loading: authLoading, user /*, loginWithGoogle, linkGoogleAccount */ } = useAuth();
   const {
     unlockWalletFromFirestore,
     setupLocalPasscode,
@@ -39,6 +42,8 @@ const LoginScreen = ({ navigation }) => {
   const { showLoading, hideLoading } = useLoading();
   const { COLORS, SPACING, FONTS } = useTheme();
   const insets = useSafeAreaInsets();
+  // Google Sign-In disabled for now — email/password only.
+  // const { request: googleRequest, promptAsync: promptGoogleAsync, idToken: googleIdToken } = useGoogleAuth();
 
   const [email,           setEmail]           = useState('');
   const [password,        setPassword]        = useState('');
@@ -50,8 +55,20 @@ const LoginScreen = ({ navigation }) => {
   const [confirmPasscode,    setConfirmPasscode]    = useState('');
   const [decryptedWallet,    setDecryptedWallet]    = useState(null);
 
+  // Google Sign-In disabled for now — email/password only.
+  // Was: set when Google sign-in hits auth/account-exists-with-different-credential
+  // — the user needs to sign in with their original method below, then the
+  // effect that already watches `user` completes the link.
+  // const [pendingGoogleLink, setPendingGoogleLink] = useState(null);
+
   const passwordRef = useRef(password);
   useEffect(() => { passwordRef.current = password; }, [password]);
+
+  // Which method the in-flight sign-in used — decides whether the post-login
+  // effect below can auto-attempt a Firestore wallet unlock with the typed
+  // password (email/password path) or must leave that to UnlockWalletScreen
+  // (Google path — there's no password here to supply).
+  const signedInMethodRef = useRef('password');
 
   const pulseAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -97,7 +114,9 @@ const LoginScreen = ({ navigation }) => {
       fontSize: FONTS.sizes.xs,
       fontWeight: '800',
       letterSpacing: 1.5,
-      color: `${COLORS.background}99`,
+      // container's bg is COLORS.primary — was COLORS.background (a
+      // "light bg needs light text" assumption that predates the lime accent)
+      color: `${COLORS.onPrimary}99`,
       marginBottom: SPACING.sm,
       textTransform: 'uppercase',
     },
@@ -105,7 +124,7 @@ const LoginScreen = ({ navigation }) => {
       fontSize: 40,
       fontWeight: '900',
       letterSpacing: -1,
-      color: COLORS.background,
+      color: COLORS.onPrimary,
       lineHeight: 44,
     },
 
@@ -200,6 +219,7 @@ const LoginScreen = ({ navigation }) => {
   const handleLogin = async () => {
     if (!validateForm()) return;
     try {
+      signedInMethodRef.current = 'password';
       setStep(STEP.SIGNING_IN);
       await login(email, password);
     } catch (error) {
@@ -213,6 +233,37 @@ const LoginScreen = ({ navigation }) => {
       Alert.alert('Login Error', msg);
     }
   };
+
+  // Google Sign-In disabled for now — email/password only.
+  // const handleGoogleIdToken = async (token) => {
+  //   try {
+  //     signedInMethodRef.current = 'google';
+  //     setStep(STEP.SIGNING_IN);
+  //     await loginWithGoogle(token);
+  //     // No setStep(IDLE) here on success — the effect below (watching `user`)
+  //     // picks up from here, same as handleLogin's email/password path.
+  //   } catch (err) {
+  //     setStep(STEP.IDLE);
+  //     if (err.code === 'auth/account-exists-with-different-credential') {
+  //       setPendingGoogleLink({ pendingCredential: err.pendingCredential });
+  //       Alert.alert(
+  //         'Account Already Exists',
+  //         err.message ||
+  //           `An account already exists for ${err.email}. Sign in below with your original method to link Google to it.`,
+  //         [{ text: 'OK' }],
+  //       );
+  //     } else {
+  //       Alert.alert('Google Sign-In Failed', err.message || 'Please try again.');
+  //     }
+  //   }
+  // };
+  //
+  // useEffect(() => {
+  //   if (googleIdToken) {
+  //     handleGoogleIdToken(googleIdToken);
+  //   }
+  //   // eslint-disable-next-line react-hooks/exhaustive-deps
+  // }, [googleIdToken]);
 
   const attemptWalletUnlock = async () => {
     try {
@@ -241,7 +292,11 @@ const LoginScreen = ({ navigation }) => {
 
   useEffect(() => {
     if (user && !checkingWallet && step === STEP.SIGNING_IN) {
-      if (firestoreWalletExists) {
+      // Google Sign-In disabled for now — email/password only, so this was
+      // always the password path. (Was: guarded by signedInMethodRef here
+      // too, to skip the auto-unlock for Google sign-ins, which have no
+      // password to supply — see the commented-out Google block above.)
+      if (firestoreWalletExists && signedInMethodRef.current === 'password') {
         attemptWalletUnlock();
       } else {
         setStep(STEP.IDLE);
@@ -412,6 +467,23 @@ const LoginScreen = ({ navigation }) => {
                 <Text style={styles.stepText}>Decrypting your wallet…</Text>
               </View>
             )}
+
+            {/* Google Sign-In disabled for now — email/password only.
+            <View style={styles.divider}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>OR</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            <Button
+              title="Continue with Google"
+              onPress={() => promptGoogleAsync()}
+              disabled={isLoading || !googleRequest}
+              variant="outline"
+              fullWidth
+              icon={<Ionicons name="logo-google" size={18} color={COLORS.text} />}
+            />
+            */}
 
             <View style={styles.divider}>
               <View style={styles.dividerLine} />

@@ -1,0 +1,55 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-ink text-text font-body antialiased;
+    font-feature-settings: "ss01" 1;
+  }
+
+  ::selection {
+    background: #d6ff00;
+    color: #000000;
+  }
+
+  h1, h2, h3, h4 {
+    @apply font-display;
+    text-wrap: balance;
+  }
+
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer utilities {
+  .wrap {
+    @apply mx-auto max-w-wrap px-6 md:px-10;
+  }
+
+  .hair-b {
+    @apply border-b border-hair;
+  }
+
+  .hair-t {
+    @apply border-t border-hair;
+  }
+
+  .eyebrow {
+    @apply inline-flex items-center gap-2 rounded-full border border-hair bg-surface px-3 py-1.5 text-[11px] font-mono uppercase tracking-[0.14em] text-muted;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

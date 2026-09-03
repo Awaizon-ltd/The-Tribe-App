@@ -59,7 +59,7 @@ export const useMintToken = () => {
 
       if (!isWSYNDeployed(activeChain.id)) {
         throw new Error(
-          `WSYN is not yet deployed on ${activeChain.name}. Please switch to Base Sepolia.`,
+          `WSYN is not yet deployed on ${activeChain.name}. Please switch to Robinhood Chain.`,
         );
       }
 
@@ -169,7 +169,7 @@ export const useMintToken = () => {
   );
 
   const explorerUrl = txHash
-    ? `${WSYN_EXPLORER[activeChain?.id] ?? "https://basescan.org"}/tx/${txHash}`
+    ? `${WSYN_EXPLORER[activeChain?.id] ?? "https://robinhoodchain.blockscout.com"}/tx/${txHash}`
     : null;
 
   return {
@@ -199,7 +199,7 @@ const parseContractError = (err) => {
     return "Voucher expired. Please try again.";
   }
   if (raw.includes("InsufficientFee") || raw.includes("insufficient funds")) {
-    return "You need at least 0.0004 ETH on Base to cover the mint fee.";
+    return "You need at least 0.0004 ETH on Robinhood Chain to cover the mint fee.";
   }
   if (raw.includes("RecipientMismatch")) {
     return "Wallet address mismatch. Please use the wallet linked to your account.";
@@ -214,7 +214,7 @@ const parseContractError = (err) => {
     return "Incorrect passcode. Please try again.";
   }
   if (raw.includes("network changed") || raw.includes("NETWORK_ERROR")) {
-    return "Please switch your wallet to Base network and try again.";
+    return "Please switch your wallet to Robinhood Chain and try again.";
   }
   return raw;
 };

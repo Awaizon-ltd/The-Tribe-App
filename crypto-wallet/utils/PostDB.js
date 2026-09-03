@@ -7,17 +7,17 @@ import { getDatabase } from "./Database";
 
 // ============ Post Operations ============
 
-export const cachePost = async (guildId, post) => {
+export const cachePost = async (tribeId, post) => {
   const db = getDatabase();
   
   await db.runAsync(
-    `INSERT OR REPLACE INTO guild_posts 
-    (id, guild_id, user_id, username, user_avatar, description, image_url, 
+    `INSERT OR REPLACE INTO tribe_posts 
+    (id, tribe_id, user_id, username, user_avatar, description, image_url, 
      link_preview, likes_count, comments_count, shares_count, created_at, updated_at, is_deleted) 
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       post.id,
-      guildId,
+      tribeId,
       post.userId,
       post.username,
       post.userAvatar || null,
@@ -34,24 +34,24 @@ export const cachePost = async (guildId, post) => {
   );
 };
 
-export const batchCachePosts = async (guildId, posts) => {
+export const batchCachePosts = async (tribeId, posts) => {
   const db = getDatabase();
   
   await db.withTransactionAsync(async () => {
     for (const post of posts) {
-      await cachePost(guildId, post);
+      await cachePost(tribeId, post);
     }
   });
 };
 
-export const getCachedPosts = async (guildId, limit = 5, beforeTimestamp = null) => {
+export const getCachedPosts = async (tribeId, limit = 5, beforeTimestamp = null) => {
   const db = getDatabase();
   
   let query = `
-    SELECT * FROM guild_posts 
-    WHERE guild_id = ? AND is_deleted = 0
+    SELECT * FROM tribe_posts 
+    WHERE tribe_id = ? AND is_deleted = 0
   `;
-  const params = [guildId];
+  const params = [tribeId];
   
   if (beforeTimestamp) {
     query += ' AND created_at < ?';
@@ -65,7 +65,7 @@ export const getCachedPosts = async (guildId, limit = 5, beforeTimestamp = null)
   
   return results.map(row => ({
     id: row.id,
-    guildId: row.guild_id,
+    tribeId: row.tribe_id,
     userId: row.user_id,
     username: row.username,
     userAvatar: row.user_avatar,
@@ -85,7 +85,7 @@ export const updatePostLikesCount = async (postId, increment = true) => {
   const db = getDatabase();
   
   await db.runAsync(
-    `UPDATE guild_posts 
+    `UPDATE tribe_posts 
      SET likes_count = likes_count + ? 
      WHERE id = ?`,
     [increment ? 1 : -1, postId]
@@ -96,7 +96,7 @@ export const updatePostCommentsCount = async (postId, increment = true) => {
   const db = getDatabase();
   
   await db.runAsync(
-    `UPDATE guild_posts 
+    `UPDATE tribe_posts 
      SET comments_count = comments_count + ? 
      WHERE id = ?`,
     [increment ? 1 : -1, postId]
@@ -107,21 +107,21 @@ export const deletePost = async (postId) => {
   const db = getDatabase();
   
   await db.runAsync(
-    'UPDATE guild_posts SET is_deleted = 1 WHERE id = ?',
+    'UPDATE tribe_posts SET is_deleted = 1 WHERE id = ?',
     [postId]
   );
 };
 
 // ============ Like Operations ============
 
-export const addLike = async (postId, guildId, userId, username) => {
+export const addLike = async (postId, tribeId, userId, username) => {
   const db = getDatabase();
   
   await db.runAsync(
     `INSERT OR IGNORE INTO post_likes 
-    (post_id, guild_id, user_id, username, liked_at) 
+    (post_id, tribe_id, user_id, username, liked_at) 
     VALUES (?, ?, ?, ?, ?)`,
-    [postId, guildId, userId, username, Date.now()]
+    [postId, tribeId, userId, username, Date.now()]
   );
 };
 
@@ -167,12 +167,12 @@ export const cacheComment = async (comment) => {
   
   await db.runAsync(
     `INSERT OR REPLACE INTO post_comments 
-    (id, post_id, guild_id, user_id, username, user_avatar, comment_text, created_at, updated_at, is_deleted) 
+    (id, post_id, tribe_id, user_id, username, user_avatar, comment_text, created_at, updated_at, is_deleted) 
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       comment.id,
       comment.postId,
-      comment.guildId,
+      comment.tribeId,
       comment.userId,
       comment.username,
       comment.userAvatar || null,
@@ -198,7 +198,7 @@ export const getCachedComments = async (postId, limit = 20) => {
   return results.map(row => ({
     id: row.id,
     postId: row.post_id,
-    guildId: row.guild_id,
+    tribeId: row.tribe_id,
     userId: row.user_id,
     username: row.username,
     userAvatar: row.user_avatar,
@@ -220,12 +220,12 @@ export const deleteComment = async (commentId) => {
 
 // ============ Sync State ============
 
-export const getPostSyncState = async (guildId) => {
+export const getPostSyncState = async (tribeId) => {
   const db = getDatabase();
   
   const result = await db.getFirstAsync(
-    'SELECT * FROM post_sync_state WHERE guild_id = ?',
-    [guildId]
+    'SELECT * FROM post_sync_state WHERE tribe_id = ?',
+    [tribeId]
   );
   
   return result ? {
@@ -234,24 +234,24 @@ export const getPostSyncState = async (guildId) => {
   } : null;
 };
 
-export const updatePostSyncState = async (guildId, timestamp) => {
+export const updatePostSyncState = async (tribeId, timestamp) => {
   const db = getDatabase();
   
   await db.runAsync(
     `INSERT OR REPLACE INTO post_sync_state 
-    (guild_id, last_sync_timestamp) 
+    (tribe_id, last_sync_timestamp) 
     VALUES (?, ?)`,
-    [guildId, timestamp]
+    [tribeId, timestamp]
   );
 };
 
-export const clearPostCache = async (guildId) => {
+export const clearPostCache = async (tribeId) => {
   const db = getDatabase();
   
   await db.withTransactionAsync(async () => {
-    await db.runAsync('DELETE FROM guild_posts WHERE guild_id = ?', [guildId]);
-    await db.runAsync('DELETE FROM post_likes WHERE guild_id = ?', [guildId]);
-    await db.runAsync('DELETE FROM post_comments WHERE guild_id = ?', [guildId]);
-    await db.runAsync('DELETE FROM post_sync_state WHERE guild_id = ?', [guildId]);
+    await db.runAsync('DELETE FROM tribe_posts WHERE tribe_id = ?', [tribeId]);
+    await db.runAsync('DELETE FROM post_likes WHERE tribe_id = ?', [tribeId]);
+    await db.runAsync('DELETE FROM post_comments WHERE tribe_id = ?', [tribeId]);
+    await db.runAsync('DELETE FROM post_sync_state WHERE tribe_id = ?', [tribeId]);
   });
 };

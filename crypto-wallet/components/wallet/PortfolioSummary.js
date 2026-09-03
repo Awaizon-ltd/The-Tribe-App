@@ -1,11 +1,12 @@
 import React, { useEffect, useRef } from "react";
-import { View, Text, StyleSheet, Animated, Easing } from "react-native";
+import { View, Text, StyleSheet, Animated, Easing, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useChain } from "../../contexts/ChainContext";
 import { SPACING, FONTS } from "../../constants/Theme";
-import { formatPriceChange } from "../../services/coingecko";
+import { formatPriceChange } from "../../services/CoinGeckoService";
+import ChainIcon from "../common/ChainIcon";
 
 const formatNumber = (num, decimals = 2) => {
   if (num === undefined || num === null) return "0.00";
@@ -48,6 +49,9 @@ const PortfolioSummary = ({
   totalChange24h,
   loading,
   includesTestnet = false,
+  accentColor,
+  onPressChain,
+  activeChain,
 }) => {
   const { COLORS } = useTheme();
   const { isProduction } = useChain();
@@ -109,7 +113,7 @@ const PortfolioSummary = ({
   }, [loading]);
 
   const isPositive = change.isPositive;
-  const trendColor = isPositive ? COLORS.success : COLORS.error;
+  const trendColor = isPositive ? (accentColor ?? COLORS.success) : COLORS.error;
 
   // Split value for styled rendering
   const formatted = formatNumber(totalValue, 2);
@@ -170,6 +174,21 @@ const PortfolioSummary = ({
       color: COLORS.primary,
       fontWeight: "800",
       letterSpacing: 0.8,
+    },
+    chainPill: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      backgroundColor: (accentColor ?? COLORS.primary) + "15",
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 20,
+    },
+    chainPillIcon: { width: 16, height: 16, borderRadius: 8 },
+    chainPillText: {
+      fontSize: 11,
+      color: accentColor ?? COLORS.primary,
+      fontWeight: "700",
     },
 
     // ── Value display ─────────────────────────────────────────
@@ -285,11 +304,22 @@ const PortfolioSummary = ({
           {/* Top row */}
           <View style={styles.topRow}>
             <Text style={styles.label}>Portfolio</Text>
-            <View style={styles.networkPill}>
-              <View style={styles.networkDot} />
-              <Text style={styles.networkText}>
-                {isProduction ? "MAINNET" : "DEVNET"}
-              </Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              {onPressChain && activeChain && (
+                <TouchableOpacity style={styles.chainPill} onPress={onPressChain}>
+                  <ChainIcon chain={activeChain} size={16} style={styles.chainPillIcon} />
+                  <Text style={styles.chainPillText} numberOfLines={1}>
+                    {activeChain.name}
+                  </Text>
+                  <Ionicons name="chevron-down" size={11} color={accentColor ?? COLORS.primary} />
+                </TouchableOpacity>
+              )}
+              <View style={styles.networkPill}>
+                <View style={styles.networkDot} />
+                <Text style={styles.networkText}>
+                  {isProduction ? "MAINNET" : "DEVNET"}
+                </Text>
+              </View>
             </View>
           </View>
 

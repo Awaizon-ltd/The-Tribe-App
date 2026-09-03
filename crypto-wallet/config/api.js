@@ -24,6 +24,21 @@ export const API_CONFIG = {
     BRIDGE_BALANCE: "/bridge/balance",
     BRIDGE_PROVE_WITHDRAWAL: "/bridge/prove-withdrawal",
     BRIDGE_FINALIZE_WITHDRAWAL: "/bridge/finalize-withdrawal",
+
+    // LI.FI — cross-chain swap/bridge aggregator (wallet mode + community mode)
+    LIFI_CHAINS: "/lifi/chains",
+    LIFI_QUOTE: "/lifi/quote",
+    LIFI_STATUS: "/lifi/status",
+
+    // CoinGecko — market-data proxy (key, if any, stays server-side)
+    COINGECKO_NATIVE_PRICES: "/coingecko/native-prices",
+    COINGECKO_SIMPLE_PRICE: "/coingecko/simple-price",
+    COINGECKO_TRENDING: "/coingecko/trending",
+    COINGECKO_SEARCH: "/coingecko/search",
+    COINGECKO_GAINERS: "/coingecko/gainers",
+    COINGECKO_TOP_BY_CHAIN: "/coingecko/top-by-chain",
+    COINGECKO_COIN_DETAIL: "/coingecko/coin-detail",
+    COINGECKO_MARKETS: "/coingecko/markets",
   },
 
   // Cache duration (1 hour)

@@ -14,7 +14,6 @@ export const CHAIN_ID_TO_KEY = {
   1: 'ethereum',         // Ethereum Mainnet
   56: 'bsc',             // BSC Mainnet
   8453: 'base',          // Base Mainnet
-  84532: 'baseTestnet',  // Base Sepolia Testnet
   42161: 'arbitrum',     // Arbitrum One
   10: 'optimism',        // Optimism Mainnet ✅ ADD THIS
   43114: 'avalanche',    // Avalanche C-Chain
@@ -60,7 +59,6 @@ export const CONTRACTS = {
       ethereum: "0x2345678901234567890123456789012345678901",
       bsc: "0x3456789012345678901234567890123456789012",
       base: "0x616f59CCc6951958C6177574AEDCe4A83caF8360",
-      baseTestnet: "0x5678901234567890123456789012345678901234",
       arbitrum: "0x6789012345678901234567890123456789012345",
       avalanche: "0x7890123456789012345678901234567890123456",
       abstract: "0x8901234567890123456789012345678901234567",
@@ -75,7 +73,6 @@ export const CONTRACTS = {
       ethereum: "0xbcdef0123456789abcdef0123456789abcdef012",
       bsc: "0xcdef0123456789abcdef0123456789abcdef0123",
       base: "0xdef0123456789abcdef0123456789abcdef01234",
-      baseTestnet: "0xef0123456789abcdef0123456789abcdef012345",
       arbitrum: "0xf0123456789abcdef0123456789abcdef0123456",
       avalanche: "0x0123456789abcdef0123456789abcdef01234567",
       abstract: "0x123456789abcdef0123456789abcdef012345678",
@@ -90,7 +87,6 @@ export const CONTRACTS = {
       ethereum: "0xb2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1",
       bsc: "0xc3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2",
       base: "0xd4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3",
-      baseTestnet: "0xe5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4",
       arbitrum: "0xf6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5",
       avalanche: "0xa7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6",
       abstract: "0xb8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7",
@@ -105,7 +101,6 @@ export const CONTRACTS = {
       ethereum: "0x2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c",
       bsc: "0x3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d",
       base: "0x4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e",
-      baseTestnet: "0x5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f",
       arbitrum: "0x6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a",
       avalanche: "0x7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b",
       abstract: "0x8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c",

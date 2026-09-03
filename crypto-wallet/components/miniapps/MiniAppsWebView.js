@@ -1,34 +1,67 @@
 import React, { useRef, useCallback, useState } from 'react';
-import { View, StyleSheet, Alert as RNAlert } from 'react-native';
+import { View, StyleSheet, Alert as RNAlert, Share } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { ethers } from 'ethers';
+import * as Haptics from 'expo-haptics';
 import { useWallet } from '../../contexts/WalletContext';
-import api from '../../services/GuildApiService';
+import api from '../../services/TribeApiService';
 import ConfirmActionSheet from './ConfirmActionSheet';
 import { BRIDGE_METHODS, MINI_APP_SDK_SOURCE } from './bridge/Protocol';
+
+const HAPTIC_STYLES = {
+  light: Haptics.ImpactFeedbackStyle.Light,
+  medium: Haptics.ImpactFeedbackStyle.Medium,
+  heavy: Haptics.ImpactFeedbackStyle.Heavy,
+  success: 'success',
+  warning: 'warning',
+  error: 'error',
+};
 
 // Non-sensitive methods — resolved directly, no confirmation sheet.
 // Sensitive methods (wallet.signMessage, wallet.sendTx) are handled
 // separately below, since they need a passcode, not just a native object call.
-const createSafeHandlers = ({ guildId, address, userProfile }) => ({
+const createSafeHandlers = ({ miniAppId, tribeId, address, userProfile }) => ({
   'wallet.getAddress':  async () => address ?? null,
-  'guild.getMembers':   async () => (guildId ? api.getMembers(guildId) : []),
-  'guild.getInfo':      async () => (guildId ? api.getGuild(guildId) : null),
+  'tribe.getMembers':   async () => (tribeId ? api.getMembers(tribeId) : []),
+  'tribe.getInfo':      async () => (tribeId ? api.getTribe(tribeId) : null),
   'chat.sendMessage':   async ({ text }) => {
-    if (!guildId) throw new Error('No guild context for this mini-app');
-    return api.sendMessage(guildId, { text });
+    if (!tribeId) throw new Error('No tribe context for this mini-app');
+    return api.sendMessage(tribeId, { text });
   },
   'user.getProfile':    async () => userProfile,
   'ui.showToast':       async ({ message }) => { RNAlert.alert(message); return true; },
   'ui.close':            async () => true, // handled by parent screen via onClose prop, see below
+  'ui.share':           async ({ message, url }) => {
+    const result = await Share.share(url ? { message, url } : { message });
+    return { action: result.action };
+  },
+  'ui.haptic':          async ({ style = 'light' } = {}) => {
+    const s = HAPTIC_STYLES[style] ?? HAPTIC_STYLES.light;
+    if (s === 'success' || s === 'warning' || s === 'error') {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType[s[0].toUpperCase() + s.slice(1)]);
+    } else {
+      await Haptics.impactAsync(s);
+    }
+    return true;
+  },
+  'storage.get':        async ({ key }) => {
+    if (!key) throw new Error('storage.get requires a key');
+    const res = await api.getMiniAppStorage(miniAppId, key);
+    return res?.value ?? null;
+  },
+  'storage.set':        async ({ key, value }) => {
+    if (!key) throw new Error('storage.set requires a key');
+    await api.setMiniAppStorage(miniAppId, key, value);
+    return true;
+  },
 });
 
-const MiniAppWebView = ({ miniApp, guildId, grantedScopes, userProfile, onClose }) => {
+const MiniAppWebView = ({ miniApp, tribeId, grantedScopes, userProfile, onClose }) => {
   const { address, createSignerForTransaction, hasLocalPasscode } = useWallet();
   const webViewRef = useRef(null);
   const [pendingConfirm, setPendingConfirm] = useState(null); // { id, method, params }
 
-  const safeHandlers = createSafeHandlers({ guildId, address, userProfile });
+  const safeHandlers = createSafeHandlers({ miniAppId: miniApp.id, tribeId, address, userProfile });
 
   const sendResponse = useCallback((id, error, result) => {
     webViewRef.current?.injectJavaScript(

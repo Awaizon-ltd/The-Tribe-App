@@ -15,8 +15,10 @@ import {
   Image,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ChainIcon from "../../components/common/ChainIcon";
 import { useTheme } from "../../contexts/ThemeContext";
+import { useWallet } from "../../contexts/WalletContext";
 import {
   useLaunchDAO,
   DAO_GENRES,
@@ -24,26 +26,47 @@ import {
   PAYMENT_METHODS,
 } from "../../hooks/useLaunchDAO";
 import { TransactionModal } from "../../components/TransactionModal";
-import { ChainSelector } from "../../components/ChainSelector";
 import TokenSelectorModal from "../../components/common/TokenSelectorModal";
-import { formatEther, isAddress, Contract, formatUnits } from "ethers";
+import { isAddress, Contract, formatUnits } from "ethers";
 // ✅ Updated: use Cloudinary instead of Firebase
 import {
   pickImage,
   uploadImageToCloudinary,
 } from "../../services/ImageUploadServices";
 import DaoApiService from "../../services/api/daoAPI";
-import {
-  getTokenListForChain,
-  getTokenByAddress,
-} from "../../utils/token/TokenListUtil";
+import { getTokenListForChain } from "../../utils/token/TokenListUtil";
 import factoryABI from "../../abi/DAOFactoryAbi.json";
 import Alert from "../../utils/Alert";
 import ChainSwitcher from "../../components/wallet/ChainSwitcher";
 
+// Minimal ERC20 surface needed to pay the creation fee in a token instead of
+// the chain's native currency — read the current allowance, and approve the
+// factory to pull the fee if it isn't enough yet.
+const FEE_TOKEN_ABI = [
+  "function allowance(address owner, address spender) view returns (uint256)",
+  "function approve(address spender, uint256 amount) returns (bool)",
+];
+
+const GENRE_ICONS = {
+  0: "image-outline",
+  1: "game-controller-outline",
+  2: "people-outline",
+  3: "trending-up-outline",
+  4: "sparkles-outline",
+  5: "flame-outline",
+  6: "rocket-outline",
+  7: "business-outline",
+  8: "hardware-chip-outline",
+  9: "share-social-outline",
+  10: "planet-outline",
+  11: "ellipsis-horizontal-outline",
+};
+
 const LaunchDAOScreen = ({ navigation }) => {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = createStyles(theme);
+  const { provider, address } = useWallet();
 
   const {
     activeChain,
@@ -84,6 +107,11 @@ const LaunchDAOScreen = ({ navigation }) => {
   const [errors, setErrors] = useState({});
   const [showTxModal, setShowTxModal] = useState(false);
   const [txParams, setTxParams] = useState(null);
+  // 'create' pays for the DAO itself; 'approve' is the ERC20 pre-step that
+  // only happens when paying the fee in a token and the allowance is short.
+  const [pendingAction, setPendingAction] = useState("create");
+  const [pendingFormData, setPendingFormData] = useState(null);
+  const [checkingAllowance, setCheckingAllowance] = useState(false);
 
   // Token selector state
   const [showTokenSelector, setShowTokenSelector] = useState(false);
@@ -92,6 +120,20 @@ const LaunchDAOScreen = ({ navigation }) => {
   useEffect(() => {
     fetchCreationFees();
   }, [fetchCreationFees]);
+
+  // If the token option was selected while a different factory had one
+  // configured, and the active chain's factory doesn't, fall back to ETH
+  // rather than leaving an unusable option silently selected.
+  useEffect(() => {
+    if (
+      formData.paymentMethod === PAYMENT_METHODS.TOKEN &&
+      !fetchingFees &&
+      !creationFees.feeTokenSymbol
+    ) {
+      updateField("paymentMethod", PAYMENT_METHODS.ETH);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [creationFees.feeTokenSymbol, fetchingFees]);
 
   const updateField = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -119,8 +161,6 @@ const LaunchDAOScreen = ({ navigation }) => {
 
   // Handle token selection from modal
   const handleSelectToken = async (token) => {
-    console.log("[LaunchDAOScreen] Token selected:", token);
-
     setSelectedToken(token);
     updateField("tokenAddress", token.address);
 
@@ -142,14 +182,7 @@ const LaunchDAOScreen = ({ navigation }) => {
       }
 
       if (address && isAddress(address)) {
-        console.log(
-          "[LaunchDAOScreen] Auto-fetching token details for custom address:",
-          address,
-        );
         fetchTokenDetails(address);
-        setSelectedToken(null);
-      } else if (address && address.length >= 10) {
-        clearTokenDetails();
         setSelectedToken(null);
       } else {
         clearTokenDetails();
@@ -166,13 +199,10 @@ const LaunchDAOScreen = ({ navigation }) => {
       Alert.alert("Error", "Please enter a token address");
       return;
     }
-
     if (!isAddress(address)) {
       Alert.alert("Error", "Invalid token address format");
       return;
     }
-
-    console.log("[LaunchDAOScreen] Manually fetching token details");
     await fetchTokenDetails(address);
   };
 
@@ -253,10 +283,6 @@ const LaunchDAOScreen = ({ navigation }) => {
           );
           finalImageUrl = uploadResult.url;
           updateField("imageUrl", finalImageUrl);
-          console.log(
-            "[LaunchDAOScreen] Image uploaded to Cloudinary:",
-            finalImageUrl,
-          );
         } catch (uploadError) {
           setUploadingImage(false);
           Alert.alert(
@@ -273,7 +299,7 @@ const LaunchDAOScreen = ({ navigation }) => {
         }
       }
 
-      proceedWithTransaction(finalImageUrl);
+      await proceedWithTransaction(finalImageUrl);
     } catch (error) {
       console.error("[LaunchDAOScreen] Error in handleLaunchDAO:", error);
       Alert.alert("Error", error.message || "Failed to launch DAO");
@@ -281,28 +307,74 @@ const LaunchDAOScreen = ({ navigation }) => {
     }
   };
 
-  const proceedWithTransaction = (imageUrl) => {
+  const proceedWithTransaction = async (imageUrl) => {
     const finalFormData = {
       ...formData,
       imageUrl: imageUrl || "",
     };
 
+    if (finalFormData.paymentMethod === PAYMENT_METHODS.TOKEN) {
+      if (!creationFees.feeTokenAddress) {
+        Alert.alert(
+          "Token Payment Unavailable",
+          "This chain's factory hasn't been configured with a fee token yet. Pay with the native currency instead.",
+        );
+        return;
+      }
+
+      // createDAO pulls the fee via transferFrom — without enough allowance
+      // it just reverts. Check first, and if short, run approve() as its
+      // own transaction before opening the real creation transaction.
+      setCheckingAllowance(true);
+      try {
+        const erc20 = new Contract(creationFees.feeTokenAddress, FEE_TOKEN_ABI, provider);
+        const required = BigInt(creationFees.tokenFee || "0");
+        const current = BigInt(await erc20.allowance(address, factoryAddress));
+
+        if (current < required) {
+          setPendingFormData(finalFormData);
+          setPendingAction("approve");
+          setTxParams({
+            address: creationFees.feeTokenAddress,
+            abi: FEE_TOKEN_ABI,
+            functionName: "approve",
+            args: [factoryAddress, required.toString()],
+            value: "0",
+          });
+          setShowTxModal(true);
+          return;
+        }
+      } catch (error) {
+        console.error("[LaunchDAOScreen] Allowance check failed:", error);
+        Alert.alert("Error", `Could not check ${creationFees.feeTokenSymbol} allowance: ${error.message}`);
+        return;
+      } finally {
+        setCheckingAllowance(false);
+      }
+    }
+
+    setPendingAction("create");
     const params = getCreateDAOTxParams(finalFormData);
-    console.log(
-      "[LaunchDAOScreen] Opening transaction modal with params:",
-      params,
-    );
     setTxParams(params);
     setShowTxModal(true);
   };
 
   const handleTxSuccess = (receipt) => {
-    console.log("[LaunchDAOScreen] ✅ Transaction successful!");
-    console.log("[LaunchDAOScreen] Receipt:", receipt);
+    // Approval confirmed — chain straight into the real creation tx rather
+    // than making the user tap "Create" again.
+    if (pendingAction === "approve") {
+      setShowTxModal(false);
+      const params = getCreateDAOTxParams(pendingFormData);
+      setPendingAction("create");
+      setTimeout(() => {
+        setTxParams(params);
+        setShowTxModal(true);
+      }, 300);
+      return;
+    }
 
     try {
       const iface = new Contract(factoryAddress, factoryABI).interface;
-
       let daoAddress = null;
 
       for (const log of receipt.logs) {
@@ -311,10 +383,8 @@ const LaunchDAOScreen = ({ navigation }) => {
             topics: log.topics,
             data: log.data,
           });
-
           if (parsedLog && parsedLog.name === "DAOCreated") {
             daoAddress = parsedLog.args.daoAddress || parsedLog.args[0];
-            console.log("[LaunchDAOScreen] ✅ DAO Address found:", daoAddress);
             break;
           }
         } catch (e) {
@@ -323,9 +393,6 @@ const LaunchDAOScreen = ({ navigation }) => {
       }
 
       if (!daoAddress) {
-        console.error(
-          "[LaunchDAOScreen] ❌ Could not find DAO address in event logs",
-        );
         Alert.alert(
           "DAO Created",
           "Your DAO was created successfully, but we could not find the address. Please check your transaction on the block explorer.",
@@ -397,27 +464,47 @@ const LaunchDAOScreen = ({ navigation }) => {
   };
 
   const handleTxError = (error) => {
-    console.error("[LaunchDAOScreen] ❌ DAO creation failed:", error);
+    console.error("[LaunchDAOScreen] ❌ Transaction failed:", error);
+    if (pendingAction === "approve") {
+      // Leave the form as-is — user can just tap Create again to retry.
+      setPendingFormData(null);
+    }
   };
 
   const formatTokenFee = (fee) => {
     if (!fee) return "...";
     try {
-      return formatUnits(fee, 18);
+      return formatUnits(fee, creationFees.feeTokenDecimals || 18);
     } catch (error) {
       return fee.toString();
     }
   };
+
+  // The native-currency fee is always 18 decimals regardless of what the
+  // fee ERC20's decimals() happens to report — keep the two formatters
+  // separate rather than reusing formatTokenFee for both.
+  const formatEthFee = (fee) => {
+    if (!fee) return "...";
+    try {
+      const formatted = formatUnits(fee, 18);
+      return formatted.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
+    } catch (error) {
+      return fee.toString();
+    }
+  };
+
+  const launchDisabled =
+    !isDeployed || uploadingImage || fetchingToken || checkingAllowance;
 
   return (
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
-      {/* Compact Header with Chain Switcher */}
-      <View style={styles.header}>
+      {/* ── Header ── */}
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity
-          style={styles.backButton}
+          style={styles.iconBtn}
           onPress={() => navigation.goBack()}
         >
           <Ionicons name="arrow-back" size={20} color={theme.COLORS.text} />
@@ -441,24 +528,15 @@ const LaunchDAOScreen = ({ navigation }) => {
 
       {!isDeployed && (
         <View style={styles.warningContainer}>
-          <Ionicons name="warning" size={24} color={theme.COLORS.warning} />
+          <Ionicons name="warning" size={20} color={theme.COLORS.warning} />
           <Text style={styles.warningText}>
             Factory not deployed on {activeChain.name}
           </Text>
         </View>
       )}
 
-      <View style={styles.progressContainer}>
-        <View style={styles.progressBar}>
-          <View
-            style={[
-              styles.progressFill,
-              { width: `${(currentStep / 2) * 100}%` },
-            ]}
-          />
-        </View>
-        <Text style={styles.progressText}>Step {currentStep} of 2</Text>
-      </View>
+      {/* ── Stepper ── */}
+      <StepIndicator theme={theme} currentStep={currentStep} />
 
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <ScrollView
@@ -493,21 +571,19 @@ const LaunchDAOScreen = ({ navigation }) => {
               creationFees={creationFees}
               fetchingFees={fetchingFees}
               formatTokenFee={formatTokenFee}
+              formatEthFee={formatEthFee}
               PAYMENT_METHODS={PAYMENT_METHODS}
+              chainSymbol={activeChain.symbol}
             />
           )}
         </ScrollView>
       </TouchableWithoutFeedback>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: insets.bottom + theme.SPACING.md }]}>
         {currentStep === 1 ? (
           <TouchableOpacity style={styles.primaryButton} onPress={handleNext}>
             <Text style={styles.primaryButtonText}>Next</Text>
-            <Ionicons
-              name="arrow-forward"
-              size={20}
-              color={theme.COLORS.surface}
-            />
+            <Ionicons name="arrow-forward" size={20} color={theme.COLORS.onPrimary} />
           </TouchableOpacity>
         ) : (
           <View style={styles.buttonRow}>
@@ -518,30 +594,21 @@ const LaunchDAOScreen = ({ navigation }) => {
               <Text style={styles.secondaryButtonText}>Back</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[
-                styles.primaryButton,
-                (!isDeployed || uploadingImage || fetchingToken) &&
-                  styles.disabledButton,
-              ]}
+              style={[styles.primaryButton, launchDisabled && styles.disabledButton]}
               onPress={handleLaunchDAO}
-              disabled={!isDeployed || uploadingImage || fetchingToken}
+              disabled={launchDisabled}
             >
-              {uploadingImage ? (
+              {uploadingImage || checkingAllowance ? (
                 <>
-                  <ActivityIndicator
-                    size="small"
-                    color={theme.COLORS.surface}
-                  />
-                  <Text style={styles.primaryButtonText}>Uploading...</Text>
+                  <ActivityIndicator size="small" color={theme.COLORS.onPrimary} />
+                  <Text style={styles.primaryButtonText}>
+                    {uploadingImage ? "Uploading..." : "Checking allowance..."}
+                  </Text>
                 </>
               ) : (
                 <>
                   <Text style={styles.primaryButtonText}>Create Community</Text>
-                  <Ionicons
-                    name="rocket"
-                    size={20}
-                    color={theme.COLORS.surface}
-                  />
+                  <Ionicons name="rocket" size={20} color={theme.COLORS.onPrimary} />
                 </>
               )}
             </TouchableOpacity>
@@ -565,7 +632,9 @@ const LaunchDAOScreen = ({ navigation }) => {
         selectedTokenAddress={formData.tokenAddress}
       />
 
-      {/* Transaction Modal */}
+      {/* Transaction Modal — reused for both the approve() pre-step and the
+          real createDAO() call; title (and the fee-token hero amount, when
+          paying in a token) reflect which one is currently pending. */}
       {txParams && (
         <TransactionModal
           visible={showTxModal}
@@ -575,8 +644,24 @@ const LaunchDAOScreen = ({ navigation }) => {
           functionName={txParams.functionName}
           args={txParams.args}
           value={txParams.value}
-          title="Create Your Onchain Community"
-          description="You're about to create your onchain community. Please review the details carefully."
+          title={
+            pendingAction === "approve"
+              ? `Approve ${formatTokenFee(creationFees.tokenFee)} ${creationFees.feeTokenSymbol || "Token"} Fee`
+              : "Create Your Onchain Community"
+          }
+          tokenAmount={
+            pendingAction === "approve" ||
+            (pendingAction === "create" && formData.paymentMethod === PAYMENT_METHODS.TOKEN)
+              ? formatTokenFee(creationFees.tokenFee)
+              : undefined
+          }
+          tokenSymbol={
+            pendingAction === "approve" ||
+            (pendingAction === "create" && formData.paymentMethod === PAYMENT_METHODS.TOKEN)
+              ? creationFees.feeTokenSymbol
+              : undefined
+          }
+          chainSymbol={activeChain.symbol}
           onSuccess={handleTxSuccess}
           onError={handleTxError}
         />
@@ -584,6 +669,164 @@ const LaunchDAOScreen = ({ navigation }) => {
     </KeyboardAvoidingView>
   );
 };
+
+// ─── Step indicator ─────────────────────────────────────────────────────────
+
+const STEP_META = [
+  { icon: "document-text-outline", label: "Basics" },
+  { icon: "settings-outline", label: "Settings" },
+];
+
+const StepIndicator = ({ theme, currentStep }) => {
+  const s = stepIndicatorStyles(theme);
+  return (
+    <View style={s.row}>
+      {STEP_META.map((step, i) => {
+        const stepNum = i + 1;
+        const done = stepNum < currentStep;
+        const active = stepNum === currentStep;
+        return (
+          <React.Fragment key={step.label}>
+            <View style={s.item}>
+              <View
+                style={[
+                  s.dot,
+                  done && s.dotDone,
+                  active && s.dotActive,
+                ]}
+              >
+                {done ? (
+                  <Ionicons name="checkmark" size={16} color={theme.COLORS.onPrimary} />
+                ) : (
+                  <Ionicons
+                    name={step.icon}
+                    size={15}
+                    color={active ? theme.COLORS.onPrimary : theme.COLORS.textTertiary}
+                  />
+                )}
+              </View>
+              <Text style={[s.label, (active || done) && s.labelActive]}>{step.label}</Text>
+            </View>
+            {i < STEP_META.length - 1 && (
+              <View style={[s.connector, currentStep > stepNum && s.connectorDone]} />
+            )}
+          </React.Fragment>
+        );
+      })}
+    </View>
+  );
+};
+
+const stepIndicatorStyles = (theme) =>
+  StyleSheet.create({
+    row: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      paddingHorizontal: theme.SPACING.xl,
+      paddingTop: theme.SPACING.lg,
+      paddingBottom: theme.SPACING.md,
+    },
+    item: { alignItems: "center", gap: 6, width: 72 },
+    dot: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: theme.COLORS.surface,
+      borderWidth: 1.5,
+      borderColor: theme.COLORS.border,
+    },
+    dotActive: { backgroundColor: theme.COLORS.primary, borderColor: theme.COLORS.primary },
+    dotDone: { backgroundColor: theme.COLORS.primary, borderColor: theme.COLORS.primary },
+    label: { fontSize: theme.FONTS.sizes.xs, color: theme.COLORS.textTertiary, fontWeight: "600" },
+    labelActive: { color: theme.COLORS.text },
+    connector: {
+      flex: 1,
+      height: 1.5,
+      backgroundColor: theme.COLORS.border,
+      marginTop: 16,
+      marginHorizontal: -8,
+    },
+    connectorDone: { backgroundColor: theme.COLORS.primary },
+  });
+
+// ─── Shared section header ──────────────────────────────────────────────────
+
+const SectionHeader = ({ theme, icon, title, description }) => {
+  const s = sectionHeaderStyles(theme);
+  return (
+    <View style={s.wrap}>
+      <View style={s.iconCircle}>
+        <Ionicons name={icon} size={26} color={theme.COLORS.primary} />
+      </View>
+      <Text style={s.title}>{title}</Text>
+      {!!description && <Text style={s.description}>{description}</Text>}
+    </View>
+  );
+};
+
+const sectionHeaderStyles = (theme) =>
+  StyleSheet.create({
+    wrap: { alignItems: "center", marginBottom: theme.SPACING.xl },
+    iconCircle: {
+      width: 64,
+      height: 64,
+      borderRadius: 32,
+      backgroundColor: `${theme.COLORS.primary}18`,
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: theme.SPACING.sm,
+    },
+    title: {
+      fontSize: theme.FONTS.sizes.lg,
+      fontWeight: "800",
+      color: theme.COLORS.text,
+      marginBottom: theme.SPACING.xs,
+      letterSpacing: -0.3,
+    },
+    description: {
+      fontSize: theme.FONTS.sizes.md,
+      color: theme.COLORS.textSecondary,
+      textAlign: "center",
+      lineHeight: 22,
+      paddingHorizontal: theme.SPACING.md,
+    },
+  });
+
+// ─── Card wrapper (groups related fields) ───────────────────────────────────
+
+const FormCard = ({ theme, title, children }) => {
+  const s = formCardStyles(theme);
+  return (
+    <View style={s.card}>
+      {!!title && <Text style={s.cardTitle}>{title}</Text>}
+      {children}
+    </View>
+  );
+};
+
+const formCardStyles = (theme) =>
+  StyleSheet.create({
+    card: {
+      backgroundColor: theme.COLORS.surface,
+      borderRadius: theme.BORDER_RADIUS.xl,
+      borderWidth: 1,
+      borderColor: theme.COLORS.border,
+      padding: theme.SPACING.lg,
+      marginBottom: theme.SPACING.md,
+    },
+    cardTitle: {
+      fontSize: theme.FONTS.sizes.sm,
+      fontWeight: "700",
+      color: theme.COLORS.textSecondary,
+      textTransform: "uppercase",
+      letterSpacing: 0.6,
+      marginBottom: theme.SPACING.md,
+    },
+  });
+
+// ─── Step 1 ──────────────────────────────────────────────────────────────────
 
 const Step1BasicInfo = ({
   theme,
@@ -600,111 +843,84 @@ const Step1BasicInfo = ({
 
   return (
     <View style={styles.stepContainer}>
-      <View style={styles.stepHeader}>
-        <Text style={styles.stepIcon}>📋</Text>
-        <Text style={styles.stepTitle}>Basic Information</Text>
-        <Text style={styles.stepDescription}>
-          Let's start with the basics. Give your onchain community a name and
-          select its category.
-        </Text>
-      </View>
+      <SectionHeader
+        theme={theme}
+        icon="clipboard-outline"
+        title="Basic Information"
+        description="Give your onchain community a name and pick the category that fits it best."
+      />
 
-      <View style={styles.inputGroup}>
-        <Text style={styles.label}>Community Name *</Text>
-        <TextInput
-          style={[styles.input, errors.daoName && styles.inputError]}
-          placeholder="e.g., My Onchain Community"
-          placeholderTextColor={theme.COLORS.textTertiary}
-          value={formData.daoName}
-          onChangeText={(text) => updateField("daoName", text)}
-          maxLength={100}
-        />
-        {errors.daoName && (
-          <Text style={styles.errorText}>{errors.daoName}</Text>
-        )}
-        <Text style={styles.helperText}>
-          Choose a memorable name for your community
-        </Text>
-      </View>
-
-      <View style={styles.inputGroup}>
-        <Text style={styles.label}>Genre *</Text>
-        <View style={styles.genreGrid}>
-          {Object.entries(DAO_GENRES).map(([key, value]) => (
-            <TouchableOpacity
-              key={value}
-              style={[
-                styles.genreChip,
-                formData.genre === value && styles.genreChipSelected,
-              ]}
-              onPress={() => updateField("genre", value)}
-            >
-              <Text
-                style={[
-                  styles.genreChipText,
-                  formData.genre === value && styles.genreChipTextSelected,
-                ]}
-              >
-                {GENRE_LABELS[value]}
-              </Text>
-            </TouchableOpacity>
-          ))}
+      <FormCard theme={theme}>
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Community Name *</Text>
+          <TextInput
+            style={[styles.input, errors.daoName && styles.inputError]}
+            placeholder="e.g., My Onchain Community"
+            placeholderTextColor={theme.COLORS.textTertiary}
+            value={formData.daoName}
+            onChangeText={(text) => updateField("daoName", text)}
+            maxLength={100}
+          />
+          {errors.daoName ? (
+            <Text style={styles.errorText}>{errors.daoName}</Text>
+          ) : (
+            <Text style={styles.helperText}>Choose a memorable name for your community</Text>
+          )}
         </View>
-        {errors.genre && <Text style={styles.errorText}>{errors.genre}</Text>}
-        <Text style={styles.helperText}>
-          Select the category that best describes your community
-        </Text>
-      </View>
 
-      <View style={styles.inputGroup}>
-        <Text style={styles.label}>Community Image (Optional)</Text>
+        <View style={[styles.inputGroup, { marginBottom: 0 }]}>
+          <Text style={styles.label}>Genre *</Text>
+          <View style={styles.genreGrid}>
+            {Object.entries(DAO_GENRES).map(([, value]) => {
+              const selected = formData.genre === value;
+              return (
+                <TouchableOpacity
+                  key={value}
+                  style={[styles.genreChip, selected && styles.genreChipSelected]}
+                  onPress={() => updateField("genre", value)}
+                  activeOpacity={0.75}
+                >
+                  <Ionicons
+                    name={GENRE_ICONS[value] || "ellipsis-horizontal-outline"}
+                    size={14}
+                    color={selected ? theme.COLORS.onPrimary : theme.COLORS.textSecondary}
+                  />
+                  <Text style={[styles.genreChipText, selected && styles.genreChipTextSelected]}>
+                    {GENRE_LABELS[value]}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          {errors.genre && <Text style={styles.errorText}>{errors.genre}</Text>}
+        </View>
+      </FormCard>
 
+      <FormCard theme={theme} title="Community Image · Optional">
         {selectedImage ? (
           <View style={styles.imagePreviewContainer}>
-            <Image
-              source={{ uri: selectedImage }}
-              style={styles.imagePreview}
-            />
-            <TouchableOpacity
-              style={styles.removeImageButton}
-              onPress={onRemoveImage}
-            >
-              <Ionicons
-                name="close-circle"
-                size={24}
-                color={theme.COLORS.error}
-              />
+            <Image source={{ uri: selectedImage }} style={styles.imagePreview} />
+            <TouchableOpacity style={styles.removeImageButton} onPress={onRemoveImage}>
+              <Ionicons name="close-circle" size={24} color={theme.COLORS.error} />
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.changeImageButton}
-              onPress={onSelectImage}
-            >
+            <TouchableOpacity style={styles.changeImageButton} onPress={onSelectImage}>
               <Ionicons name="camera" size={16} color={theme.COLORS.primary} />
               <Text style={styles.changeImageText}>Change Image</Text>
             </TouchableOpacity>
           </View>
         ) : (
-          <TouchableOpacity style={styles.uploadButton} onPress={onSelectImage}>
-            <Ionicons
-              name="cloud-upload-outline"
-              size={32}
-              color={theme.COLORS.primary}
-            />
+          <TouchableOpacity style={styles.uploadButton} onPress={onSelectImage} activeOpacity={0.8}>
+            <Ionicons name="cloud-upload-outline" size={30} color={theme.COLORS.primary} />
             <Text style={styles.uploadButtonText}>Upload Community Image</Text>
-            <Text style={styles.uploadButtonSubtext}>
-              Tap to select from gallery
-            </Text>
+            <Text style={styles.uploadButtonSubtext}>Tap to select from gallery · 1:1 recommended</Text>
           </TouchableOpacity>
         )}
-
-        <Text style={styles.helperText}>
-          Add a logo or banner for your community. Recommended: 1:1 aspect ratio
-          (square)
-        </Text>
-      </View>
+      </FormCard>
     </View>
   );
 };
+
+// ─── Step 2 ──────────────────────────────────────────────────────────────────
 
 const Step2GovernanceSettings = ({
   theme,
@@ -715,57 +931,41 @@ const Step2GovernanceSettings = ({
   tokenDetails,
   fetchingToken,
   tokenError,
-  onFetchToken,
   onOpenTokenSelector,
   creationFees,
   fetchingFees,
   formatTokenFee,
+  formatEthFee,
   PAYMENT_METHODS,
+  chainSymbol,
 }) => {
   const styles = createStyles(theme);
+  const tokenPaymentAvailable = !!creationFees.feeTokenSymbol;
 
   return (
     <View style={styles.stepContainer}>
-      <View style={styles.stepHeader}>
-        <Text style={styles.stepIcon}>⚙️</Text>
-        <Text style={styles.stepTitle}>Governance Settings</Text>
-        <Text style={styles.stepDescription}>
-          Configure how your community will govern and make decisions onchain.
-        </Text>
-      </View>
+      <SectionHeader
+        theme={theme}
+        icon="options-outline"
+        title="Governance Settings"
+        description="Configure how your community will govern and make decisions onchain."
+      />
 
-      <View style={styles.inputGroup}>
-        <Text style={styles.label}>Governance Token *</Text>
-
-        <TouchableOpacity
-          style={styles.tokenSelectorButton}
-          onPress={onOpenTokenSelector}
-        >
+      <FormCard theme={theme} title="Governance Token">
+        <TouchableOpacity style={styles.tokenSelectorButton} onPress={onOpenTokenSelector} activeOpacity={0.8}>
           <View style={styles.tokenSelectorLeft}>
             {selectedToken && selectedToken.logoURI ? (
-              <Image
-                source={{ uri: selectedToken.logoURI }}
-                style={styles.tokenSelectorLogo}
-              />
+              <Image source={{ uri: selectedToken.logoURI }} style={styles.tokenSelectorLogo} />
             ) : (
               <View style={styles.tokenSelectorLogoPlaceholder}>
-                <Ionicons
-                  name="diamond-outline"
-                  size={20}
-                  color={theme.COLORS.primary}
-                />
+                <Ionicons name="diamond-outline" size={20} color={theme.COLORS.primary} />
               </View>
             )}
-
             <View style={styles.tokenSelectorInfo}>
               {selectedToken && !selectedToken.isCustom ? (
                 <>
-                  <Text style={styles.tokenSelectorSymbol}>
-                    {selectedToken.symbol}
-                  </Text>
-                  <Text style={styles.tokenSelectorName} numberOfLines={1}>
-                    {selectedToken.name}
-                  </Text>
+                  <Text style={styles.tokenSelectorSymbol}>{selectedToken.symbol}</Text>
+                  <Text style={styles.tokenSelectorName} numberOfLines={1}>{selectedToken.name}</Text>
                 </>
               ) : formData.tokenAddress ? (
                 <>
@@ -775,40 +975,25 @@ const Step2GovernanceSettings = ({
                   </Text>
                 </>
               ) : (
-                <Text style={styles.tokenSelectorPlaceholder}>
-                  Select token or enter address
-                </Text>
+                <Text style={styles.tokenSelectorPlaceholder}>Select token or enter address</Text>
               )}
             </View>
           </View>
-
-          <Ionicons
-            name="chevron-forward"
-            size={20}
-            color={theme.COLORS.textTertiary}
-          />
+          <Ionicons name="chevron-forward" size={20} color={theme.COLORS.textTertiary} />
         </TouchableOpacity>
 
-        {errors.tokenAddress && (
-          <Text style={styles.errorText}>{errors.tokenAddress}</Text>
-        )}
+        {errors.tokenAddress && <Text style={styles.errorText}>{errors.tokenAddress}</Text>}
 
         {fetchingToken && (
           <View style={styles.tokenDetailsLoading}>
             <ActivityIndicator size="small" color={theme.COLORS.primary} />
-            <Text style={styles.tokenDetailsLoadingText}>
-              Verifying token contract...
-            </Text>
+            <Text style={styles.tokenDetailsLoadingText}>Verifying token contract...</Text>
           </View>
         )}
 
         {tokenError && !fetchingToken && (
           <View style={styles.tokenDetailsError}>
-            <Ionicons
-              name="alert-circle"
-              size={20}
-              color={theme.COLORS.error}
-            />
+            <Ionicons name="alert-circle" size={18} color={theme.COLORS.error} />
             <Text style={styles.tokenErrorText}>{tokenError}</Text>
           </View>
         )}
@@ -816,185 +1001,162 @@ const Step2GovernanceSettings = ({
         {tokenDetails && !fetchingToken && !tokenError && (
           <View style={styles.tokenDetailsCard}>
             <View style={styles.tokenDetailsHeader}>
-              <Ionicons
-                name="checkmark-circle"
-                size={20}
-                color={theme.COLORS.success}
-              />
-              <Text style={styles.tokenDetailsTitle}>Token Verified ✓</Text>
+              <Ionicons name="checkmark-circle" size={18} color={theme.COLORS.success} />
+              <Text style={styles.tokenDetailsTitle}>Token Verified</Text>
             </View>
-
             <View style={styles.tokenDetailRow}>
-              <Text style={styles.tokenDetailLabel}>Name:</Text>
+              <Text style={styles.tokenDetailLabel}>Name</Text>
               <Text style={styles.tokenDetailValue}>{tokenDetails.name}</Text>
             </View>
-
             <View style={styles.tokenDetailRow}>
-              <Text style={styles.tokenDetailLabel}>Symbol:</Text>
+              <Text style={styles.tokenDetailLabel}>Symbol</Text>
               <Text style={styles.tokenDetailValue}>{tokenDetails.symbol}</Text>
             </View>
-
             <View style={styles.tokenDetailRow}>
-              <Text style={styles.tokenDetailLabel}>Decimals:</Text>
+              <Text style={styles.tokenDetailLabel}>Total Supply</Text>
               <Text style={styles.tokenDetailValue}>
-                {tokenDetails.decimals}
-              </Text>
-            </View>
-
-            <View style={styles.tokenDetailRow}>
-              <Text style={styles.tokenDetailLabel}>Total Supply:</Text>
-              <Text style={styles.tokenDetailValue}>
-                {(
-                  Number(tokenDetails.totalSupply) /
-                  Math.pow(10, tokenDetails.decimals)
-                ).toLocaleString()}
+                {(Number(tokenDetails.totalSupply) / Math.pow(10, tokenDetails.decimals)).toLocaleString()}
               </Text>
             </View>
           </View>
         )}
 
-        <Text style={styles.helperText}>
-          Select from the list or enter a custom ERC-20 token address for voting
-        </Text>
-      </View>
+        <Text style={styles.helperText}>Members vote with this token's balance. Pick from the list or paste a custom ERC-20 address.</Text>
+      </FormCard>
 
-      <View style={styles.inputGroup}>
-        <Text style={styles.label}>Quorum (%) *</Text>
-        <TextInput
-          style={[styles.input, errors.quorum && styles.inputError]}
-          placeholder="50"
-          placeholderTextColor={theme.COLORS.textTertiary}
-          value={formData.quorum}
-          onChangeText={(text) => updateField("quorum", text)}
-          keyboardType="numeric"
-        />
-        {errors.quorum && <Text style={styles.errorText}>{errors.quorum}</Text>}
-        <Text style={styles.helperText}>
-          Minimum % of total token supply required to pass proposals (1-100)
-        </Text>
-      </View>
-
-      <View style={styles.inputGroup}>
-        <Text style={styles.label}>Proposal Threshold *</Text>
-        <TextInput
-          style={[styles.input, errors.threshold && styles.inputError]}
-          placeholder="100"
-          placeholderTextColor={theme.COLORS.textTertiary}
-          value={formData.threshold}
-          onChangeText={(text) => updateField("threshold", text)}
-          keyboardType="numeric"
-        />
-        {errors.threshold && (
-          <Text style={styles.errorText}>{errors.threshold}</Text>
-        )}
-        <Text style={styles.helperText}>
-          Minimum tokens required to create a proposal
-        </Text>
-      </View>
-
-      <View style={styles.inputGroup}>
-        <Text style={styles.label}>Voting Period (Hours) *</Text>
-        <TextInput
-          style={[styles.input, errors.votingPeriodHours && styles.inputError]}
-          placeholder="72"
-          placeholderTextColor={theme.COLORS.textTertiary}
-          value={formData.votingPeriodHours}
-          onChangeText={(text) => updateField("votingPeriodHours", text)}
-          keyboardType="numeric"
-        />
-        {errors.votingPeriodHours && (
-          <Text style={styles.errorText}>{errors.votingPeriodHours}</Text>
-        )}
-        <Text style={styles.helperText}>
-          How long members have to vote on proposals
-        </Text>
-      </View>
-
-      <View style={styles.inputGroup}>
-        <Text style={styles.label}>Timelock Period (Hours) *</Text>
-        <TextInput
-          style={[
-            styles.input,
-            errors.timelockPeriodHours && styles.inputError,
-          ]}
-          placeholder="24"
-          placeholderTextColor={theme.COLORS.textTertiary}
-          value={formData.timelockPeriodHours}
-          onChangeText={(text) => updateField("timelockPeriodHours", text)}
-          keyboardType="numeric"
-        />
-        {errors.timelockPeriodHours && (
-          <Text style={styles.errorText}>{errors.timelockPeriodHours}</Text>
-        )}
-        <Text style={styles.helperText}>
-          Delay before executing passed proposals (min:{" "}
-          {creationFees.minTimelock || 1} hours)
-        </Text>
-      </View>
-
-      <View style={styles.inputGroup}>
-        <Text style={styles.label}>Payment Method *</Text>
-        <View style={styles.paymentOptions}>
-          <TouchableOpacity
-            style={[
-              styles.paymentOption,
-              formData.paymentMethod === PAYMENT_METHODS.ETH &&
-                styles.paymentOptionSelected,
-            ]}
-            onPress={() => updateField("paymentMethod", PAYMENT_METHODS.ETH)}
-          >
-            <Ionicons
-              name={
-                formData.paymentMethod === PAYMENT_METHODS.ETH
-                  ? "radio-button-on"
-                  : "radio-button-off"
-              }
-              size={20}
-              color={
-                formData.paymentMethod === PAYMENT_METHODS.ETH
-                  ? theme.COLORS.primary
-                  : theme.COLORS.textSecondary
-              }
+      <FormCard theme={theme} title="Voting Rules">
+        <View style={styles.fieldRow}>
+          <View style={styles.fieldHalf}>
+            <Text style={styles.label}>Quorum (%)</Text>
+            <TextInput
+              style={[styles.input, errors.quorum && styles.inputError]}
+              placeholder="50"
+              placeholderTextColor={theme.COLORS.textTertiary}
+              value={formData.quorum}
+              onChangeText={(text) => updateField("quorum", text)}
+              keyboardType="numeric"
             />
-            <View style={styles.paymentOptionContent}>
-              <Text style={styles.paymentOptionTitle}>Pay with ETH</Text>
-              <Text style={styles.paymentOptionFee}>
-                Fee:{" "}
-                {creationFees.ethFee ? formatEther(creationFees.ethFee) : "..."}{" "}
-                ETH
-              </Text>
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            disabled={true}
-            style={[
-              styles.paymentOption,
-              styles.paymentOptionDisabled,
-              formData.paymentMethod === PAYMENT_METHODS.TOKEN &&
-                styles.paymentOptionSelected,
-            ]}
-            activeOpacity={1}
-          >
-            <Ionicons
-              name="radio-button-off"
-              size={20}
-              color={theme.COLORS.textSecondary}
+          </View>
+          <View style={styles.fieldHalf}>
+            <Text style={styles.label}>Proposal Threshold</Text>
+            <TextInput
+              style={[styles.input, errors.threshold && styles.inputError]}
+              placeholder="100"
+              placeholderTextColor={theme.COLORS.textTertiary}
+              value={formData.threshold}
+              onChangeText={(text) => updateField("threshold", text)}
+              keyboardType="numeric"
             />
-            <View style={styles.paymentOptionContent}>
-              <Text style={styles.paymentOptionTitle}>Pay with SYN</Text>
-              <Text style={styles.paymentOptionFee}>
-                Fee: {formatTokenFee(creationFees.tokenFee)} SYN
-              </Text>
-              <Text style={styles.disabledBadge}>Coming Soon 🚀</Text>
-            </View>
-          </TouchableOpacity>
+          </View>
         </View>
-        {errors.paymentMethod && (
-          <Text style={styles.errorText}>{errors.paymentMethod}</Text>
+        {(errors.quorum || errors.threshold) && (
+          <Text style={styles.errorText}>{errors.quorum || errors.threshold}</Text>
         )}
-      </View>
+
+        <View style={[styles.fieldRow, { marginTop: theme.SPACING.md }]}>
+          <View style={styles.fieldHalf}>
+            <Text style={styles.label}>Voting Period (h)</Text>
+            <TextInput
+              style={[styles.input, errors.votingPeriodHours && styles.inputError]}
+              placeholder="72"
+              placeholderTextColor={theme.COLORS.textTertiary}
+              value={formData.votingPeriodHours}
+              onChangeText={(text) => updateField("votingPeriodHours", text)}
+              keyboardType="numeric"
+            />
+          </View>
+          <View style={styles.fieldHalf}>
+            <Text style={styles.label}>Timelock (h)</Text>
+            <TextInput
+              style={[styles.input, errors.timelockPeriodHours && styles.inputError]}
+              placeholder="24"
+              placeholderTextColor={theme.COLORS.textTertiary}
+              value={formData.timelockPeriodHours}
+              onChangeText={(text) => updateField("timelockPeriodHours", text)}
+              keyboardType="numeric"
+            />
+          </View>
+        </View>
+        {(errors.votingPeriodHours || errors.timelockPeriodHours) && (
+          <Text style={styles.errorText}>{errors.votingPeriodHours || errors.timelockPeriodHours}</Text>
+        )}
+
+        <Text style={[styles.helperText, { marginTop: theme.SPACING.sm }]}>
+          Quorum: % of supply needed to pass a vote. Threshold: minimum tokens to submit a proposal.
+          Timelock minimum on this chain: {creationFees.minTimelock || 1}h.
+        </Text>
+      </FormCard>
+
+      <FormCard theme={theme} title="Creation Fee">
+        <PaymentOption
+          theme={theme}
+          selected={formData.paymentMethod === PAYMENT_METHODS.ETH}
+          onPress={() => updateField("paymentMethod", PAYMENT_METHODS.ETH)}
+          icon="flash"
+          title={`Pay with ${chainSymbol}`}
+          fee={
+            fetchingFees
+              ? "Fetching fee..."
+              : creationFees.ethFee != null
+                ? `Fee: ${formatEthFee(creationFees.ethFee)} ${chainSymbol}`
+                : "..."
+          }
+        />
+
+        <View style={{ height: theme.SPACING.sm }} />
+
+        <PaymentOption
+          theme={theme}
+          selected={formData.paymentMethod === PAYMENT_METHODS.TOKEN}
+          onPress={() => tokenPaymentAvailable && updateField("paymentMethod", PAYMENT_METHODS.TOKEN)}
+          disabled={!tokenPaymentAvailable}
+          icon="pricetag"
+          title={tokenPaymentAvailable ? `Pay with ${creationFees.feeTokenSymbol}` : "Pay with Token"}
+          fee={
+            !tokenPaymentAvailable
+              ? fetchingFees
+                ? "Checking availability..."
+                : "Not configured on this chain"
+              : `Fee: ${formatTokenFee(creationFees.tokenFee)} ${creationFees.feeTokenSymbol}`
+          }
+        />
+
+        {errors.paymentMethod && <Text style={styles.errorText}>{errors.paymentMethod}</Text>}
+      </FormCard>
     </View>
+  );
+};
+
+const PaymentOption = ({ theme, selected, onPress, disabled, icon, title, fee }) => {
+  const styles = createStyles(theme);
+  return (
+    <TouchableOpacity
+      style={[
+        styles.paymentOption,
+        selected && styles.paymentOptionSelected,
+        disabled && styles.paymentOptionDisabled,
+      ]}
+      onPress={onPress}
+      disabled={disabled}
+      activeOpacity={disabled ? 1 : 0.8}
+    >
+      <View style={[styles.paymentIconWrap, selected && styles.paymentIconWrapSelected]}>
+        <Ionicons
+          name={icon}
+          size={18}
+          color={selected ? theme.COLORS.onPrimary : theme.COLORS.textSecondary}
+        />
+      </View>
+      <View style={styles.paymentOptionContent}>
+        <Text style={styles.paymentOptionTitle}>{title}</Text>
+        <Text style={styles.paymentOptionFee}>{fee}</Text>
+      </View>
+      <Ionicons
+        name={selected ? "radio-button-on" : "radio-button-off"}
+        size={20}
+        color={selected ? theme.COLORS.primary : theme.COLORS.textTertiary}
+      />
+    </TouchableOpacity>
   );
 };
 
@@ -1009,17 +1171,21 @@ const createStyles = (theme) =>
       alignItems: "center",
       justifyContent: "space-between",
       paddingHorizontal: theme.SPACING.md,
-      paddingVertical: theme.SPACING.sm,
+      paddingBottom: theme.SPACING.md,
       borderBottomWidth: 1,
       borderBottomColor: theme.COLORS.divider,
-      paddingBottom: 20,
     },
-    backButton: {
-      padding: theme.SPACING.xs,
+    iconBtn: {
+      width: 36,
+      height: 36,
+      borderRadius: theme.BORDER_RADIUS.md,
+      backgroundColor: theme.COLORS.surface,
+      alignItems: "center",
+      justifyContent: "center",
     },
     headerTitle: {
       fontSize: theme.FONTS.sizes.md,
-      fontWeight: "600",
+      fontWeight: "700",
       color: theme.COLORS.text,
       flex: 1,
       textAlign: "center",
@@ -1043,18 +1209,10 @@ const createStyles = (theme) =>
       fontWeight: "600",
       color: theme.COLORS.text,
     },
-    chainSelectorContainer: {
-      paddingHorizontal: theme.SPACING.lg,
-      paddingVertical: theme.SPACING.md,
-      borderBottomWidth: 1,
-      borderBottomColor: theme.COLORS.divider,
-    },
     warningContainer: {
       flexDirection: "row",
       alignItems: "center",
-      backgroundColor: `${theme.COLORS.warning}20`,
-      borderWidth: 1,
-      borderColor: theme.COLORS.warning,
+      backgroundColor: `${theme.COLORS.warning}18`,
       borderRadius: theme.BORDER_RADIUS.md,
       padding: theme.SPACING.md,
       marginHorizontal: theme.SPACING.lg,
@@ -1065,66 +1223,34 @@ const createStyles = (theme) =>
       flex: 1,
       fontSize: theme.FONTS.sizes.sm,
       color: theme.COLORS.warning,
-      fontWeight: "500",
-    },
-    progressContainer: {
-      padding: theme.SPACING.lg,
-    },
-    progressBar: {
-      height: 4,
-      backgroundColor: theme.COLORS.divider,
-      borderRadius: 2,
-      overflow: "hidden",
-      marginBottom: theme.SPACING.sm,
-    },
-    progressFill: {
-      height: "100%",
-      backgroundColor: theme.COLORS.primary,
-    },
-    progressText: {
-      fontSize: theme.FONTS.sizes.sm,
-      color: theme.COLORS.textSecondary,
-      textAlign: "center",
+      fontWeight: "600",
     },
     content: {
       flex: 1,
       paddingHorizontal: theme.SPACING.lg,
     },
     stepContainer: {
+      paddingTop: theme.SPACING.sm,
       paddingBottom: theme.SPACING.xl,
-    },
-    stepHeader: {
-      alignItems: "center",
-      marginBottom: theme.SPACING.xl,
-    },
-    stepIcon: {
-      fontSize: 48,
-      marginBottom: theme.SPACING.sm,
-    },
-    stepTitle: {
-      fontSize: theme.FONTS.sizes.lg,
-      fontWeight: "bold",
-      color: theme.COLORS.text,
-      marginBottom: theme.SPACING.xs,
-    },
-    stepDescription: {
-      fontSize: theme.FONTS.sizes.md,
-      color: theme.COLORS.textSecondary,
-      textAlign: "center",
-      lineHeight: 22,
-      paddingHorizontal: theme.SPACING.md,
     },
     inputGroup: {
       marginBottom: theme.SPACING.lg,
     },
+    fieldRow: {
+      flexDirection: "row",
+      gap: theme.SPACING.md,
+    },
+    fieldHalf: {
+      flex: 1,
+    },
     label: {
-      fontSize: theme.FONTS.sizes.md,
+      fontSize: theme.FONTS.sizes.sm,
       fontWeight: "600",
-      color: theme.COLORS.text,
-      marginBottom: theme.SPACING.sm,
+      color: theme.COLORS.textSecondary,
+      marginBottom: theme.SPACING.xs,
     },
     input: {
-      backgroundColor: theme.COLORS.surface,
+      backgroundColor: theme.COLORS.background,
       borderWidth: 1,
       borderColor: theme.COLORS.border,
       borderRadius: theme.BORDER_RADIUS.md,
@@ -1136,15 +1262,16 @@ const createStyles = (theme) =>
       borderColor: theme.COLORS.error,
     },
     helperText: {
-      fontSize: theme.FONTS.sizes.sm,
+      fontSize: theme.FONTS.sizes.xs,
       color: theme.COLORS.textTertiary,
       marginTop: theme.SPACING.xs,
-      lineHeight: 18,
+      lineHeight: 17,
     },
     errorText: {
-      fontSize: theme.FONTS.sizes.sm,
+      fontSize: theme.FONTS.sizes.xs,
       color: theme.COLORS.error,
       marginTop: theme.SPACING.xs,
+      fontWeight: "600",
     },
     genreGrid: {
       flexDirection: "row",
@@ -1152,45 +1279,47 @@ const createStyles = (theme) =>
       gap: theme.SPACING.sm,
     },
     genreChip: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
       paddingHorizontal: theme.SPACING.md,
       paddingVertical: theme.SPACING.sm,
-      borderRadius: theme.BORDER_RADIUS.lg,
+      borderRadius: theme.BORDER_RADIUS.round,
       borderWidth: 1,
       borderColor: theme.COLORS.border,
-      backgroundColor: theme.COLORS.surface,
+      backgroundColor: theme.COLORS.background,
     },
     genreChipSelected: {
       borderColor: theme.COLORS.primary,
-      backgroundColor: `${theme.COLORS.primary}20`,
+      backgroundColor: theme.COLORS.primary,
     },
     genreChipText: {
-      fontSize: theme.FONTS.sizes.sm,
+      fontSize: theme.FONTS.sizes.xs,
+      fontWeight: "600",
       color: theme.COLORS.textSecondary,
     },
     genreChipTextSelected: {
-      color: theme.COLORS.primary,
-      fontWeight: "600",
+      color: theme.COLORS.onPrimary,
     },
     uploadButton: {
-      backgroundColor: theme.COLORS.surface,
-      borderWidth: 2,
+      borderWidth: 1.5,
       borderColor: theme.COLORS.border,
       borderStyle: "dashed",
-      borderRadius: theme.BORDER_RADIUS.md,
+      borderRadius: theme.BORDER_RADIUS.lg,
       padding: theme.SPACING.xl,
       alignItems: "center",
       justifyContent: "center",
     },
     uploadButtonText: {
-      fontSize: theme.FONTS.sizes.md,
-      fontWeight: "600",
-      color: theme.COLORS.primary,
+      fontSize: theme.FONTS.sizes.sm,
+      fontWeight: "700",
+      color: theme.COLORS.text,
       marginTop: theme.SPACING.sm,
     },
     uploadButtonSubtext: {
-      fontSize: theme.FONTS.sizes.sm,
+      fontSize: theme.FONTS.sizes.xs,
       color: theme.COLORS.textTertiary,
-      marginTop: theme.SPACING.xs,
+      marginTop: 2,
     },
     imagePreviewContainer: {
       position: "relative",
@@ -1198,15 +1327,15 @@ const createStyles = (theme) =>
     },
     imagePreview: {
       width: "100%",
-      height: 200,
-      borderRadius: theme.BORDER_RADIUS.md,
-      backgroundColor: theme.COLORS.surface,
+      height: 180,
+      borderRadius: theme.BORDER_RADIUS.lg,
+      backgroundColor: theme.COLORS.background,
     },
     removeImageButton: {
       position: "absolute",
       top: theme.SPACING.sm,
       right: theme.SPACING.sm,
-      backgroundColor: theme.COLORS.surface,
+      backgroundColor: theme.COLORS.card,
       borderRadius: 12,
       padding: 2,
     },
@@ -1216,7 +1345,7 @@ const createStyles = (theme) =>
       marginTop: theme.SPACING.md,
       paddingHorizontal: theme.SPACING.md,
       paddingVertical: theme.SPACING.sm,
-      backgroundColor: `${theme.COLORS.primary}20`,
+      backgroundColor: `${theme.COLORS.primary}18`,
       borderRadius: theme.BORDER_RADIUS.md,
       gap: theme.SPACING.xs,
     },
@@ -1229,7 +1358,7 @@ const createStyles = (theme) =>
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      backgroundColor: theme.COLORS.surface,
+      backgroundColor: theme.COLORS.background,
       borderWidth: 1,
       borderColor: theme.COLORS.border,
       borderRadius: theme.BORDER_RADIUS.md,
@@ -1251,7 +1380,7 @@ const createStyles = (theme) =>
       width: 36,
       height: 36,
       borderRadius: theme.BORDER_RADIUS.round,
-      backgroundColor: `${theme.COLORS.primary}20`,
+      backgroundColor: `${theme.COLORS.primary}18`,
       alignItems: "center",
       justifyContent: "center",
       marginRight: theme.SPACING.sm,
@@ -1261,7 +1390,7 @@ const createStyles = (theme) =>
     },
     tokenSelectorSymbol: {
       fontSize: theme.FONTS.sizes.md,
-      fontWeight: "600",
+      fontWeight: "700",
       color: theme.COLORS.text,
     },
     tokenSelectorName: {
@@ -1280,13 +1409,11 @@ const createStyles = (theme) =>
       marginTop: theme.SPACING.sm,
       backgroundColor: `${theme.COLORS.primary}10`,
       borderRadius: theme.BORDER_RADIUS.md,
-      borderWidth: 1,
-      borderColor: theme.COLORS.primary,
+      gap: theme.SPACING.sm,
     },
     tokenDetailsLoadingText: {
       fontSize: theme.FONTS.sizes.sm,
       color: theme.COLORS.primary,
-      marginLeft: theme.SPACING.sm,
     },
     tokenDetailsError: {
       flexDirection: "row",
@@ -1295,8 +1422,6 @@ const createStyles = (theme) =>
       marginTop: theme.SPACING.sm,
       backgroundColor: `${theme.COLORS.error}10`,
       borderRadius: theme.BORDER_RADIUS.md,
-      borderWidth: 1,
-      borderColor: theme.COLORS.error,
       gap: theme.SPACING.sm,
     },
     tokenErrorText: {
@@ -1309,8 +1434,6 @@ const createStyles = (theme) =>
       marginTop: theme.SPACING.sm,
       backgroundColor: `${theme.COLORS.success}10`,
       borderRadius: theme.BORDER_RADIUS.md,
-      borderWidth: 1,
-      borderColor: theme.COLORS.success,
     },
     tokenDetailsHeader: {
       flexDirection: "row",
@@ -1319,8 +1442,8 @@ const createStyles = (theme) =>
       gap: theme.SPACING.xs,
     },
     tokenDetailsTitle: {
-      fontSize: theme.FONTS.sizes.md,
-      fontWeight: "600",
+      fontSize: theme.FONTS.sizes.sm,
+      fontWeight: "700",
       color: theme.COLORS.success,
     },
     tokenDetailRow: {
@@ -1338,43 +1461,46 @@ const createStyles = (theme) =>
       color: theme.COLORS.text,
       fontWeight: "600",
     },
-    paymentOptions: {
-      gap: theme.SPACING.md,
-    },
     paymentOption: {
       flexDirection: "row",
       alignItems: "center",
+      gap: theme.SPACING.md,
       padding: theme.SPACING.md,
       borderRadius: theme.BORDER_RADIUS.md,
-      borderWidth: 1,
+      borderWidth: 1.5,
       borderColor: theme.COLORS.border,
-      backgroundColor: theme.COLORS.surface,
+      backgroundColor: theme.COLORS.background,
     },
     paymentOptionSelected: {
       borderColor: theme.COLORS.primary,
       backgroundColor: `${theme.COLORS.primary}10`,
     },
+    paymentOptionDisabled: {
+      opacity: 0.5,
+    },
+    paymentIconWrap: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: theme.COLORS.surface,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    paymentIconWrapSelected: {
+      backgroundColor: theme.COLORS.primary,
+    },
     paymentOptionContent: {
-      marginLeft: theme.SPACING.md,
       flex: 1,
     },
     paymentOptionTitle: {
       fontSize: theme.FONTS.sizes.md,
-      fontWeight: "600",
+      fontWeight: "700",
       color: theme.COLORS.text,
-      marginBottom: theme.SPACING.xs,
     },
     paymentOptionFee: {
-      fontSize: theme.FONTS.sizes.sm,
+      fontSize: theme.FONTS.sizes.xs,
       color: theme.COLORS.textSecondary,
-    },
-    paymentOptionDisabled: {
-      opacity: 0.45,
-    },
-    disabledBadge: {
-      marginTop: 4,
-      fontSize: 12,
-      color: theme.COLORS.warning,
+      marginTop: 2,
     },
     footer: {
       padding: theme.SPACING.lg,
@@ -1394,7 +1520,7 @@ const createStyles = (theme) =>
     primaryButtonText: {
       fontSize: theme.FONTS.sizes.md,
       fontWeight: "bold",
-      color: theme.COLORS.surface,
+      color: theme.COLORS.onPrimary,
     },
     buttonRow: {
       flexDirection: "row",

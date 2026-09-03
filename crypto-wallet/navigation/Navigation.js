@@ -59,24 +59,24 @@ const parseDeepLink = (url) => {
       return { type: "dao", daoAddress, daoGenre };
     }
 
-    // post/:guildId/:postId
+    // post/:tribeId/:postId
     if (segments[0] === "post" && segments[1] && segments[2]) {
-      return { type: "post", guildId: segments[1], postId: segments[2] };
+      return { type: "post", tribeId: segments[1], postId: segments[2] };
     }
 
-    // guild/create  (must come before guild/:id check)
-    if (segments[0] === "guild" && segments[1] === "create") {
-      return { type: "createGuild" };
+    // tribe/create  (must come before tribe/:id check)
+    if (segments[0] === "tribe" && segments[1] === "create") {
+      return { type: "createTribe" };
     }
 
-    // guild/search/:genre?
-    if (segments[0] === "guild" && segments[1] === "search") {
-      return { type: "searchGuild", genre: segments[2] ?? null };
+    // tribe/search/:genre?
+    if (segments[0] === "tribe" && segments[1] === "search") {
+      return { type: "searchTribe", genre: segments[2] ?? null };
     }
 
-    // guild/:guildId
-    if (segments[0] === "guild" && segments[1]) {
-      return { type: "guild", guildId: segments[1] };
+    // tribe/:tribeId
+    if (segments[0] === "tribe" && segments[1]) {
+      return { type: "tribe", tribeId: segments[1] };
     }
 
     // profile/:userId
@@ -109,9 +109,9 @@ const parseDeepLink = (url) => {
       };
     }
 
-    // Tab shortcuts — DACTab is the communities/guilds/daos hub
+    // Tab shortcuts — DACTab is the communities/tribes/daos hub
     const TAB_ROUTES = {
-      guilds: "DACTab",   // was "HomeTab" which doesn't exist
+      tribes: "DACTab",   // was "HomeTab" which doesn't exist
       daos: "DACTab",
       "my-daos": "MyDACTab",
       swap: "SwapTab",
@@ -136,8 +136,8 @@ const navigateToDeepLink = (navigationRef, parsed) => {
   try {
     switch (parsed.type) {
       case "invite":
-        // "GuildInvite" — registered in AppNavigator.js
-        navigationRef.current.navigate("GuildInvite", {
+        // "TribeInvite" — registered in AppNavigator.js
+        navigationRef.current.navigate("TribeInvite", {
           inviteCode: parsed.inviteCode,
         });
         return true;
@@ -152,22 +152,22 @@ const navigateToDeepLink = (navigationRef, parsed) => {
       case "post":
         navigationRef.current.navigate("PostDetail", {
           postId:  parsed.postId,
-          guildId: parsed.guildId,
+          tribeId: parsed.tribeId,
         });
         return true;
 
-      case "guild":
-        navigationRef.current.navigate("GuildDetail", {
-          guildId: parsed.guildId,
+      case "tribe":
+        navigationRef.current.navigate("TribeDetail", {
+          tribeId: parsed.tribeId,
         });
         return true;
 
-      case "createGuild":
-        navigationRef.current.navigate("CreateGuild");
+      case "createTribe":
+        navigationRef.current.navigate("CreateTribe");
         return true;
 
-      case "searchGuild":
-        navigationRef.current.navigate("SearchGuild", {
+      case "searchTribe":
+        navigationRef.current.navigate("SearchTribe", {
           genre: parsed.genre,
         });
         return true;
@@ -268,7 +268,10 @@ const Navigation = () => {
   // (auto-navigates); `() => undefined` truly disables it.
   const linking = {
     prefixes: [
-      "nexussysfi://",
+      // Matches app.json's declared "scheme" and the Google OAuth redirect
+      // URI registered in Google Cloud Console — was "nexussysfi://", a
+      // stale mismatch from before that scheme was ever declared anywhere.
+      "thetribe://",
       "https://sysfidao.com",
       "http://sysfidao.com",
       "https://www.sysfidao.com",
@@ -277,7 +280,7 @@ const Navigation = () => {
     ],
     config: {
       screens: {
-        GuildInvite: {
+        TribeInvite: {
           path: "invite/:inviteCode",
           parse: { inviteCode: (code) => code },
         },
@@ -301,16 +304,16 @@ const Navigation = () => {
           },
         },
         PostDetail: {
-          path: "post/:guildId/:postId",
-          parse: { guildId: (id) => id, postId: (id) => id },
+          path: "post/:tribeId/:postId",
+          parse: { tribeId: (id) => id, postId: (id) => id },
         },
-        GuildDetail: {
-          path: "guild/:guildId",
-          parse: { guildId: (id) => id },
+        TribeDetail: {
+          path: "tribe/:tribeId",
+          parse: { tribeId: (id) => id },
         },
-        CreateGuild: "guild/create",
-        SearchGuild: {
-          path: "guild/search/:genre?",
+        CreateTribe: "tribe/create",
+        SearchTribe: {
+          path: "tribe/search/:genre?",
           parse: { genre: (genre) => genre || null },
         },
         Profile: {

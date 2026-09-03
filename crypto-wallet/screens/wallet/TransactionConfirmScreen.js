@@ -436,12 +436,12 @@ const styles = StyleSheet.create({
   totalLabel: {
     fontSize: FONTS.sizes.lg,
     fontWeight: "bold",
-    color: COLORS.background,
+    color: COLORS.onPrimary,
   },
   totalValue: {
     fontSize: FONTS.sizes.lg,
     fontWeight: "bold",
-    color: COLORS.background,
+    color: COLORS.onPrimary,
   },
   actions: {
     marginTop: SPACING.md,

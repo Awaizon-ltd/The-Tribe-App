@@ -423,7 +423,7 @@ const SendScreen = ({ navigation, route }) => {
         </TouchableOpacity>
         <TouchableOpacity style={S.iconBtn} onPress={() => setShowChainSwitcher(true)}>
           {activeChain?.icon
-            ? <Image source={{ uri: activeChain.icon }} style={S.chainIcon} />
+            ? <Image source={typeof activeChain.icon === "string" ? { uri: activeChain.icon } : activeChain.icon} style={S.chainIcon} />
             : <Ionicons name="globe-outline" size={16} color={COLORS.textSecondary} />}
         </TouchableOpacity>
       </View>
@@ -604,7 +604,7 @@ const SendScreen = ({ navigation, route }) => {
               disabled={!effectiveAddress || !amount || parseFloat(amount) <= 0 || estimatingGas}
               activeOpacity={0.85}
             >
-              <Ionicons name="paper-plane" size={17} color="#fff" style={{ marginRight: 8 }} />
+              <Ionicons name="paper-plane" size={17} color={COLORS.onPrimary} style={{ marginRight: 8 }} />
               <Text style={S.ctaBtnText}>Send {selectedToken?.symbol}</Text>
             </TouchableOpacity>
 
@@ -832,7 +832,7 @@ const createStyles = (COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS) =>
       ...SHADOWS.large,
     },
     ctaBtnDisabled: { opacity: 0.4 },
-    ctaBtnText: { fontSize: FONTS.sizes.lg, fontWeight: '800', color: '#fff', letterSpacing: 0.2 },
+    ctaBtnText: { fontSize: FONTS.sizes.lg, fontWeight: '800', color: COLORS.onPrimary, letterSpacing: 0.2 },
     helperText: { fontSize: FONTS.sizes.xs, color: COLORS.textTertiary, textAlign: 'center', marginTop: 4 },
 
   });

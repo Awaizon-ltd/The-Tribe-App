@@ -28,6 +28,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../../contexts/AuthContext";
 import { useTheme } from "../../contexts/ThemeContext";
 import Button from "../../components/common/Button";
@@ -42,6 +43,7 @@ import Alert from "../../utils/Alert";
 const ProfileSetupScreen = ({ navigation, route }) => {
   const theme = useTheme();
   const styles = createStyles(theme);
+  const insets = useSafeAreaInsets();
   const { user, checkUsernameAvailability } = useAuth();
   const { isRequired = false } = route.params || {};
 
@@ -298,7 +300,7 @@ const ProfileSetupScreen = ({ navigation, route }) => {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={[styles.container, { paddingTop: insets.top }]}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <ScrollView

@@ -16,27 +16,12 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
-import api from '../../services/GuildApiService';
+import api from '../../services/TribeApiService';
+import { formatTimeAgo, getEntityTimestamp } from '../../utils/helpers';
 
 const CommentItem = ({ comment, theme }) => {
   const styles = createStyles(theme);
   const [imageError, setImageError] = useState(false);
-  
-  const formatTime = (timestamp) => {
-    const now = Date.now();
-    const diff = now - timestamp;
-
-    const seconds = Math.floor(diff / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-
-    if (seconds < 60) return 'Just now';
-    if (minutes < 60) return `${minutes}m`;
-    if (hours < 24) return `${hours}h`;
-    
-    const date = new Date(timestamp);
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  };
 
   return (
     <View style={styles.commentItem}>
@@ -58,22 +43,27 @@ const CommentItem = ({ comment, theme }) => {
       <View style={styles.commentContent}>
         <View style={styles.commentHeader}>
           <Text style={styles.commentUsername}>{comment.username}</Text>
-          <Text style={styles.commentTime}>{formatTime(comment.createdAt)}</Text>
+          <Text style={styles.commentTime}>{formatTimeAgo(getEntityTimestamp(comment))}</Text>
         </View>
-        <Text style={styles.commentText}>{comment.commentText}</Text>
+        {/* API returns `.text` (see tribeMongoService.getComments) — was
+            reading `.commentText`, a field that doesn't exist, so every
+            comment body silently rendered blank here. */}
+        <Text style={styles.commentText}>{comment.text}</Text>
       </View>
     </View>
   );
 };
 
-// Backend stores comment body as 'text'; CommentItem renders 'commentText'.
-const normaliseComment = (c) => ({
-  ...c,
-  commentText: c.commentText ?? c.text ?? '',
-  createdAt:   typeof c.createdAt === 'object' ? (c.createdAt?.toMillis?.() ?? Date.now()) : (c.createdAt ?? Date.now()),
-});
+// The API's `.timestamp`/`.createdAt` pass through untouched — CommentItem
+// resolves the real one via getEntityTimestamp(), so this no longer needs
+// to (mis)handle time itself. It previously tried to detect a Firestore-
+// style object timestamp (`typeof c.createdAt === 'object'`) that never
+// matches what this API actually returns (a plain ISO string), so that
+// branch was silently dead and createdAt passed through as an unparsed
+// string — same bug family as the one CommentItem itself had.
+const normaliseComment = (c) => ({ ...c });
 
-const CommentsModal = ({ visible, onClose, post, onAddComment, guildId }) => {
+const CommentsModal = ({ visible, onClose, post, onAddComment, tribeId }) => {
   const theme = useTheme();
   const styles = createStyles(theme);
   
@@ -83,15 +73,14 @@ const CommentsModal = ({ visible, onClose, post, onAddComment, guildId }) => {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!visible || !post || !guildId) return;
+    if (!visible || !post || !tribeId) return;
     let cancelled = false;
 
     const loadComments = async () => {
       setLoading(true);
       try {
-        const data = await api.getComments(guildId, post.id, 50, 0);
+        const data = await api.getComments(tribeId, post.id, 50, 0);
         if (!cancelled) {
-          // Backend stores text as 'text'; map to 'commentText' for the renderer
           setComments((data || []).map(normaliseComment));
         }
       } catch (error) {
@@ -103,7 +92,7 @@ const CommentsModal = ({ visible, onClose, post, onAddComment, guildId }) => {
 
     loadComments();
     return () => { cancelled = true; };
-  }, [visible, post?.id, guildId]);
+  }, [visible, post?.id, tribeId]);
 
   const handleSubmit = async () => {
     const text = commentText.trim();
@@ -155,22 +144,22 @@ const CommentsModal = ({ visible, onClose, post, onAddComment, guildId }) => {
           <View style={{ width: 28 }} />
         </View>
 
-        {/* Post Preview - Shows Guild Info */}
+        {/* Post Preview - Shows Tribe Info */}
         <View style={styles.postPreview}>
           <View style={styles.postPreviewHeader}>
-            {post?.guildLogo ? (
+            {post?.tribeLogo ? (
               <Image 
-                source={{ uri: post.guildLogo }} 
-                style={styles.postGuildLogo}
+                source={{ uri: post.tribeLogo }} 
+                style={styles.postTribeLogo}
               />
             ) : (
-              <View style={[styles.postGuildLogo, styles.postGuildLogoPlaceholder]}>
-                <Text style={styles.postGuildLogoText}>
-                  {post?.guildName?.charAt(0).toUpperCase()}
+              <View style={[styles.postTribeLogo, styles.postTribeLogoPlaceholder]}>
+                <Text style={styles.postTribeLogoText}>
+                  {post?.tribeName?.charAt(0).toUpperCase()}
                 </Text>
               </View>
             )}
-            <Text style={styles.postGuildName}>{post?.guildName || 'Guild'}</Text>
+            <Text style={styles.postTribeName}>{post?.tribeName || 'Tribe'}</Text>
           </View>
           <Text style={styles.postDescription} numberOfLines={2}>
             {post?.description}
@@ -268,23 +257,23 @@ const createStyles = (theme) =>
       alignItems: 'center',
       marginBottom: theme.SPACING.xs,
     },
-    postGuildLogo: {
+    postTribeLogo: {
       width: 24,
       height: 24,
       borderRadius: 12,
       marginRight: theme.SPACING.xs,
     },
-    postGuildLogoPlaceholder: {
+    postTribeLogoPlaceholder: {
       backgroundColor: theme.COLORS.primary,
       justifyContent: 'center',
       alignItems: 'center',
     },
-    postGuildLogoText: {
+    postTribeLogoText: {
       fontSize: 12,
       fontWeight: '600',
       color: theme.COLORS.surface,
     },
-    postGuildName: {
+    postTribeName: {
       fontSize: 14,
       fontWeight: '600',
       color: theme.COLORS.text,

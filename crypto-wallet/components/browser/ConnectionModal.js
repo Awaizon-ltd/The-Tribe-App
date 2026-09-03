@@ -217,7 +217,7 @@ const ConnectionModal = ({
                     <View style={styles.chainComparisonBadge}>
                       {requestedChain?.icon && (
                         <Image
-                          source={{ uri: requestedChain.icon }}
+                          source={typeof requestedChain.icon === "string" ? { uri: requestedChain.icon } : requestedChain.icon}
                           style={styles.chainComparisonIcon}
                         />
                       )}
@@ -672,7 +672,7 @@ const createStyles = (COLORS, SPACING, FONTS, BORDER_RADIUS) =>
     approveButtonText: {
       fontSize: FONTS.sizes.md,
       fontWeight: "600",
-      color: COLORS.background,
+      color: COLORS.onPrimary, // approveButton's bg is COLORS.primary
     },
   });
 

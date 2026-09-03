@@ -147,7 +147,7 @@ const ChainSwitcher = ({ visible, onClose }) => {
     },
     selectedText: {
       fontSize: 16,
-      color: COLORS.background,
+      color: COLORS.onPrimary, // selectedBadge's bg is COLORS.primary
       fontWeight: 'bold',
     },
     testnetBadge: {

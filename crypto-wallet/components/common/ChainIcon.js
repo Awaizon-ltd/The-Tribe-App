@@ -4,7 +4,7 @@ import { View, Text, Image } from 'react-native';
 // ─── Deterministic avatar colours ────────────────────────────────────────────
 const AVATAR_COLORS = [
   '#6366f1', '#f59e0b', '#10b981', '#3b82f6',
-  '#ef4444', '#8b5cf6', '#f97316', '#06b6d4',
+  '#ef4444', '#d6ff00', '#f97316', '#06b6d4',
 ];
 const avatarColor = (symbol) =>
   AVATAR_COLORS[(symbol?.charCodeAt(0) || 0) % AVATAR_COLORS.length];
@@ -37,8 +37,11 @@ const fetchCoinGeckoLogo = async (coingeckoId) => {
 
 /**
  * ChainIcon — renders a chain logo with a two-stage fallback:
- *   1. chain.icon  (static CDN URL stored in SUPPORTED_CHAINS)
- *   2. CoinGecko API via chain.coingeckoId  (fetched once, then cached)
+ *   1. chain.icon  — either a remote CDN URL (string) or a local bundled
+ *      asset (the numeric/object result of require('...png'), e.g. Robinhood
+ *      Chain's logo in constants/Chain.js)
+ *   2. CoinGecko API via chain.coingeckoId  (fetched once, then cached —
+ *      remote-URL fallback only, doesn't apply to local assets)
  *   3. Deterministic letter avatar (always works, no network needed)
  *
  * Props:
@@ -49,6 +52,7 @@ const fetchCoinGeckoLogo = async (coingeckoId) => {
 const ChainIcon = ({ chain, size = 36, style }) => {
   const [src, setSrc]           = useState(chain?.icon || null);
   const [showAvatar, setAvatar] = useState(!chain?.icon);
+  const isLocalAsset = typeof src !== 'string'; // require()'d assets are numbers (or objects in web/Expo)
   const mounted = useRef(true);
 
   useEffect(() => {
@@ -73,7 +77,7 @@ const ChainIcon = ({ chain, size = 36, style }) => {
   if (!showAvatar && src) {
     return (
       <Image
-        source={{ uri: src }}
+        source={isLocalAsset ? src : { uri: src }}
         style={[{ width: size, height: size, borderRadius: radius }, style]}
         onError={handleError}
         fadeDuration={150}

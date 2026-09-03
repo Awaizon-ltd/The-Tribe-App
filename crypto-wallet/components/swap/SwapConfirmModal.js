@@ -869,7 +869,9 @@ const StepIndicator = ({ theme, label, state }) => {
       >
         {isDone && <Ionicons name="checkmark" size={12} color="#fff" />}
         {isActive && (
-          <ActivityIndicator size="small" color={COLORS.background} />
+          // stepDotActive's bg is COLORS.primary (lime) — needs onPrimary,
+          // not the old "light bg → light text" COLORS.background stand-in.
+          <ActivityIndicator size="small" color={COLORS.onPrimary} />
         )}
       </View>
       <Text
@@ -1155,7 +1157,10 @@ const createStyles = (theme) => {
     confirmBtnText: {
       fontSize: FONTS.sizes.base,
       fontWeight: "800",
-      color: COLORS.background,
+      // Was COLORS.background — a "light bg needs light text" assumption
+      // that predates the lime accent; confirmBtn's bg is COLORS.primary,
+      // so this needs the dedicated on-color token instead.
+      color: COLORS.onPrimary,
     },
 
     // Processing

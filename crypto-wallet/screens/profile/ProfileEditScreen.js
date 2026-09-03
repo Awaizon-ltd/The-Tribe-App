@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../../contexts/AuthContext";
 import { useTheme } from "../../contexts/ThemeContext";
 import Button from "../../components/common/Button";
@@ -26,6 +27,7 @@ const USERNAME_CHANGE_COOLDOWN_DAYS = 14;
 
 const ProfileEditScreen = ({ navigation }) => {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = createStyles(theme);
   const { user, checkUsernameAvailability } = useAuth();
 
@@ -346,7 +348,7 @@ const ProfileEditScreen = ({ navigation }) => {
         showsVerticalScrollIndicator={false}
       >
         {/* Header */}
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
           <TouchableOpacity style={styles.closeButton} onPress={handleCancel}>
             <Ionicons name="close" size={28} color={theme.COLORS.text} />
           </TouchableOpacity>

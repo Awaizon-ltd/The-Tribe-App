@@ -12,6 +12,40 @@ import {
 import { MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
 import ChainIcon from "../common/ChainIcon";
 import { useTheme } from "../../contexts/ThemeContext";
+import { fetchTrendingCoins, getTopGainers } from "../../services/CoinGeckoService";
+
+const dAppSections = {
+  NFT: {
+    icon: "image-outline",
+    items: [
+      { name: "OpenSea", url: "https://opensea.io", logo: require("../../assets/opensea.png") },
+      { name: "Blur", url: "https://blur.io", logo: require("../../assets/blur.png") },
+      { name: "Magic Eden", url: "https://magiceden.io", logo: require("../../assets/magic.png") },
+    ],
+  },
+  DEX: {
+    icon: "swap-horizontal-outline",
+    items: [
+      { name: "SushiSwap", url: "https://sushi.com", logo: require("../../assets/sushi.jpg") },
+      { name: "QuickSwap", url: "https://dapp.quickswap.exchange/", logo: require("../../assets/quickswap.png") },
+      { name: "PancakeSwap", url: "https://pancakeswap.finance", logo: require("../../assets/pancake.png") },
+    ],
+  },
+  Data: {
+    icon: "bar-chart-outline",
+    items: [
+      { name: "CoinGecko", url: "https://coingecko.com", logo: require("../../assets/gecko.png") },
+      { name: "CoinMarketCap", url: "https://coinmarketcap.com", logo: require("../../assets/cmc.png") },
+    ],
+  },
+  Analytics: {
+    icon: "analytics-outline",
+    items: [
+      { name: "GeckoTerminal", url: "https://www.geckoterminal.com", logo: require("../../assets/terminal.png") },
+      { name: "DexScreener", url: "https://dexscreener.com/", logo: require("../../assets/dex.png") },
+    ],
+  },
+};
 
 const BrowserHome = ({
   navigation,
@@ -23,100 +57,31 @@ const BrowserHome = ({
   handleNavigate,
   handleUrlSubmit,
   onChainPress,
+  accentColor,
 }) => {
   const { COLORS, SPACING, FONTS, BORDER_RADIUS } = useTheme();
+  const accent = accentColor || COLORS.primary;
   const [trendingCoins, setTrendingCoins] = useState([]);
   const [topGainers, setTopGainers] = useState([]);
   const [loadingCoins, setLoadingCoins] = useState(true);
-
-  const dAppSections = {
-    "🎨 NFT": [
-      {
-        name: "OpenSea",
-        url: "https://opensea.io",
-        logo: require("../../assets/opensea.png"),
-      },
-      {
-        name: "Blur",
-        url: "https://blur.io",
-        logo: require("../../assets/blur.png"),
-      },
-      {
-        name: "Magic Eden",
-        url: "https://magiceden.io",
-        logo: require("../../assets/magic.png"),
-      },
-    ],
-    "🔄 DEX": [
-      {
-        name: "SushiSwap",
-        url: "https://sushi.com",
-        logo: require("../../assets/sushi.jpg"),
-      },
-      {
-        name: "QuickSwap",
-        url: "https://dapp.quickswap.exchange/",
-        logo: require("../../assets/quickswap.png"),
-      },
-      {
-        name: "PancakeSwap",
-        url: "https://pancakeswap.finance",
-        logo: require("../../assets/pancake.png"),
-      },
-    ],
-    "📊 Data": [
-      {
-        name: "CoinGecko",
-        url: "https://coingecko.com",
-        logo: require("../../assets/gecko.png"),
-      },
-      {
-        name: "CoinMarketCap",
-        url: "https://coinmarketcap.com",
-        logo: require("../../assets/cmc.png"),
-      },
-    ],
-    "📈 Analytics": [
-      {
-        name: "GeckoTerminal",
-        url: "https://www.geckoterminal.com",
-        logo: require("../../assets/terminal.png"),
-      },
-      {
-        name: "DexScreener",
-        url: "https://dexscreener.com/",
-        logo: require("../../assets/dex.png"),
-      },
-    ],
-  };
 
   useEffect(() => {
     fetchCryptoData();
   }, []);
 
+  // Both rows now go through the Phase-1 backend CoinGecko proxy (shared
+  // 60s server cache) instead of hitting api.coingecko.com directly from the
+  // device — same data source HomeScreen's own Trending row uses, so the
+  // two never disagree.
   const fetchCryptoData = async () => {
     setLoadingCoins(true);
     try {
-      const trendingResponse = await fetch(
-        "https://api.coingecko.com/api/v3/search/trending",
-      );
-      const trendingData = await trendingResponse.json();
-      setTrendingCoins(trendingData.coins.slice(0, 5));
-
-      const gainersResponse = await fetch(
-        "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=false&price_change_percentage=24h",
-      );
-      const gainersData = await gainersResponse.json();
-
-      const sortedGainers = gainersData
-        .filter((coin) => coin.price_change_percentage_24h > 0)
-        .sort(
-          (a, b) =>
-            b.price_change_percentage_24h - a.price_change_percentage_24h,
-        )
-        .slice(0, 5);
-
-      setTopGainers(sortedGainers);
+      const [trending, gainers] = await Promise.all([
+        fetchTrendingCoins(6),
+        getTopGainers(5),
+      ]);
+      setTrendingCoins(trending);
+      setTopGainers(gainers);
     } catch (error) {
       console.error("Error fetching crypto data:", error);
     } finally {
@@ -124,7 +89,15 @@ const BrowserHome = ({
     }
   };
 
-  const styles = createStyles(COLORS, SPACING, FONTS, BORDER_RADIUS);
+  const styles = createStyles(COLORS, SPACING, FONTS, BORDER_RADIUS, accent);
+
+  // ── Title ──────────────────────────────────────────────────────────────────
+  const renderTitle = () => (
+    <View style={styles.titleRow}>
+      <Text style={styles.title}>Discover</Text>
+      <Text style={styles.subtitle}>Explore the onchain economy</Text>
+    </View>
+  );
 
   // ── Header bar: search + chain + wallet in one strip ──────────────────────
   const renderHeader = () => (
@@ -137,7 +110,7 @@ const BrowserHome = ({
           value={inputUrl}
           onChangeText={setInputUrl}
           onSubmitEditing={handleUrlSubmit}
-          placeholder="Search or URL…"
+          placeholder="Search or enter URL"
           placeholderTextColor={COLORS.textTertiary}
           autoCapitalize="none"
           autoCorrect={false}
@@ -148,11 +121,7 @@ const BrowserHome = ({
             onPress={() => setInputUrl("")}
             hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
           >
-            <Ionicons
-              name="close-circle"
-              size={16}
-              color={COLORS.textTertiary}
-            />
+            <Ionicons name="close-circle" size={16} color={COLORS.textTertiary} />
           </TouchableOpacity>
         ) : null}
       </View>
@@ -182,25 +151,54 @@ const BrowserHome = ({
     </View>
   );
 
-  // ── Compact dApp row ──────────────────────────────────────────────────────
-  const renderDAppSection = (section, dApps) => (
-    <View key={section} style={styles.sectionRow}>
-      <Text style={styles.sectionLabel}>{section}</Text>
+  // ── Quick-access strip ───────────────────────────────────────────────────
+  const renderQuickAccess = () => (
+    <View style={styles.quickRow}>
+      {[
+        { label: "Uniswap", url: "https://app.uniswap.org", icon: "swap-horizontal" },
+        { label: "Markets", url: "https://coingecko.com", icon: "trending-up" },
+        { label: "Trade", url: "https://sushi.com", icon: "repeat" },
+        { label: "Explorer", url: activeChain.explorer || "https://basescan.org", icon: "earth" },
+      ].map((item, i) => (
+        <TouchableOpacity
+          key={i}
+          style={styles.quickBtn}
+          onPress={() => handleNavigate(item.url)}
+          activeOpacity={0.75}
+        >
+          <View style={styles.quickIconCircle}>
+            <MaterialCommunityIcons name={item.icon} size={18} color={accent} />
+          </View>
+          <Text style={styles.quickLabel}>{item.label}</Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+
+  // ── dApp category card ────────────────────────────────────────────────────
+  const renderDAppSection = (section, { icon, items }) => (
+    <View key={section} style={styles.sectionBlock}>
+      <View style={styles.sectionLabelRow}>
+        <Ionicons name={icon} size={14} color={accent} />
+        <Text style={styles.sectionLabel}>{section}</Text>
+      </View>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.hScroll}
         decelerationRate="fast"
-        snapToInterval={72}
+        snapToInterval={76}
       >
-        {dApps.map((item, i) => (
+        {items.map((item, i) => (
           <TouchableOpacity
             key={i}
             style={styles.appChip}
             onPress={() => handleNavigate(item.url)}
             activeOpacity={0.75}
           >
-            <Image source={item.logo} style={styles.appChipLogo} />
+            <View style={styles.appChipLogoWrap}>
+              <Image source={item.logo} style={styles.appChipLogo} />
+            </View>
             <Text style={styles.appChipText} numberOfLines={1}>
               {item.name}
             </Text>
@@ -211,55 +209,29 @@ const BrowserHome = ({
   );
 
   // ── Compact coin chip ─────────────────────────────────────────────────────
-  const renderCoinChip = (coin, index, isTrending = false) => {
-    const coinData = isTrending ? coin.item : coin;
-    const priceChange = isTrending
-      ? coinData.data?.price_change_percentage_24h?.usd
-      : coinData.price_change_percentage_24h;
-    const currentPrice = isTrending
-      ? coinData.data?.price
-      : coinData.current_price;
-    const isPositive = priceChange >= 0;
-
+  const renderCoinChip = (coin) => {
+    const isPositive = coin.change24h >= 0;
     return (
       <TouchableOpacity
-        key={index}
+        key={coin.id}
         style={styles.coinChip}
         activeOpacity={0.75}
-        onPress={() =>
-          handleNavigate(`https://www.coingecko.com/en/coins/${coinData.id}`)
-        }
+        onPress={() => handleNavigate(`https://www.coingecko.com/en/coins/${coin.id}`)}
       >
-        <Image
-          source={{ uri: isTrending ? coinData.large : coinData.image }}
-          style={styles.coinLogo}
-        />
+        <Image source={{ uri: coin.image }} style={styles.coinLogo} />
         <View style={styles.coinInfo}>
-          <Text style={styles.coinSymbol}>{coinData.symbol.toUpperCase()}</Text>
-          {currentPrice != null && (
+          <Text style={styles.coinSymbol}>{coin.symbol.toUpperCase()}</Text>
+          {coin.price != null && (
             <Text style={styles.coinPrice}>
-              $
-              {currentPrice >= 1
-                ? currentPrice.toFixed(2)
-                : currentPrice.toFixed(5)}
+              ${coin.price >= 1 ? coin.price.toFixed(2) : coin.price.toFixed(5)}
             </Text>
           )}
         </View>
-        {priceChange != null && (
-          <View
-            style={[
-              styles.changeBadge,
-              isPositive ? styles.posBadge : styles.negBadge,
-            ]}
-          >
-            <Text
-              style={[
-                styles.changeText,
-                isPositive ? styles.posText : styles.negText,
-              ]}
-            >
+        {coin.change24h != null && (
+          <View style={[styles.changeBadge, isPositive ? styles.posBadge : styles.negBadge]}>
+            <Text style={[styles.changeText, { color: isPositive ? accent : COLORS.error }]}>
               {isPositive ? "+" : ""}
-              {priceChange.toFixed(1)}%
+              {coin.change24h.toFixed(1)}%
             </Text>
           </View>
         )}
@@ -267,65 +239,27 @@ const BrowserHome = ({
     );
   };
 
-  // ── Quick-access strip ───────────────────────────────────────────────────
-  const renderQuickAccess = () => (
-    <View style={styles.quickRow}>
-      {[
-        {
-          label: "Uniswap",
-          url: "https://app.uniswap.org",
-          icon: "swap-horizontal",
-        },
-        { label: "Markets", url: "https://coingecko.com", icon: "trending-up" },
-        { label: "Trade", url: "https://sushi.com", icon: "repeat" },
-        {
-          label: "Explorer",
-          url: activeChain.explorerUrl || "https://basescan.org",
-          icon: "earth",
-        },
-      ].map((item, i) => (
-        <TouchableOpacity
-          key={i}
-          style={styles.quickBtn}
-          onPress={() => handleNavigate(item.url)}
-          activeOpacity={0.75}
-        >
-          <MaterialCommunityIcons
-            name={item.icon}
-            size={20}
-            color={COLORS.primary}
-          />
-          <Text style={styles.quickLabel}>{item.label}</Text>
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
-
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: COLORS.background }]}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
+      {renderTitle()}
       {renderHeader()}
-
-      {/* Quick Access */}
       {renderQuickAccess()}
 
-      <View style={[styles.divider, { backgroundColor: COLORS.border }]} />
+      <View style={styles.divider} />
 
-      {/* dApp Sections */}
-      {Object.entries(dAppSections).map(([section, dApps]) =>
-        renderDAppSection(section, dApps),
-      )}
+      {Object.entries(dAppSections).map(([section, data]) => renderDAppSection(section, data))}
 
-      <View style={[styles.divider, { backgroundColor: COLORS.border }]} />
+      <View style={styles.divider} />
 
       {/* Trending */}
-      <View style={styles.sectionRow}>
+      <View style={styles.sectionBlock}>
         <View style={styles.sectionLabelRow}>
-          <Ionicons name="flame" size={15} color={COLORS.warning} />
-          <Text style={styles.sectionLabel}> Trending</Text>
+          <Ionicons name="flame" size={15} color="#f97316" />
+          <Text style={styles.sectionLabel}>Trending</Text>
           <TouchableOpacity
             onPress={fetchCryptoData}
             hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
@@ -335,71 +269,55 @@ const BrowserHome = ({
           </TouchableOpacity>
         </View>
         {loadingCoins ? (
-          <ActivityIndicator
-            size="small"
-            color={COLORS.primary}
-            style={{ marginVertical: 8 }}
-          />
+          <ActivityIndicator size="small" color={accent} style={{ marginVertical: 8 }} />
         ) : (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.hScroll}
-          >
-            {trendingCoins.map((c, i) => renderCoinChip(c, i, true))}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hScroll}>
+            {trendingCoins.map((c) => renderCoinChip(c))}
           </ScrollView>
         )}
       </View>
 
       {/* Top Gainers */}
-      <View style={styles.sectionRow}>
+      <View style={styles.sectionBlock}>
         <View style={styles.sectionLabelRow}>
-          <Ionicons name="trending-up" size={15} color={COLORS.success} />
-          <Text style={styles.sectionLabel}> Gainers 24h</Text>
+          <Ionicons name="trending-up" size={15} color={accent} />
+          <Text style={styles.sectionLabel}>Gainers 24h</Text>
         </View>
         {loadingCoins ? (
-          <ActivityIndicator
-            size="small"
-            color={COLORS.primary}
-            style={{ marginVertical: 8 }}
-          />
+          <ActivityIndicator size="small" color={accent} style={{ marginVertical: 8 }} />
         ) : (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.hScroll}
-          >
-            {topGainers.map((c, i) => renderCoinChip(c, i, false))}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hScroll}>
+            {topGainers.map((c) => renderCoinChip(c))}
           </ScrollView>
         )}
       </View>
 
       {/* Footer */}
       <View style={styles.footer}>
-        <MaterialCommunityIcons
-          name="shield-check"
-          size={13}
-          color={COLORS.textTertiary}
-        />
+        <MaterialCommunityIcons name="shield-check" size={13} color={COLORS.textTertiary} />
         <Text style={styles.footerText}> Secured · Web3</Text>
       </View>
     </ScrollView>
   );
 };
 
-const createStyles = (COLORS, SPACING, FONTS, BORDER_RADIUS) =>
+const createStyles = (COLORS, SPACING, FONTS, BORDER_RADIUS, accent) =>
   StyleSheet.create({
     container: { flex: 1 },
     content: { paddingBottom: 24 },
+
+    // ── Title ───────────────────────────────────────────────────────────────
+    titleRow: { paddingHorizontal: 16, paddingTop: 12, marginBottom: 12 },
+    title: { fontSize: 24, fontWeight: "800", color: COLORS.text, letterSpacing: -0.5 },
+    subtitle: { fontSize: 13, color: COLORS.textSecondary, marginTop: 2 },
 
     // ── Header ──────────────────────────────────────────────────────────────
     header: {
       flexDirection: "row",
       alignItems: "center",
       gap: 8,
-      paddingHorizontal: 12,
-      paddingTop: 10,
-      paddingBottom: 8,
+      paddingHorizontal: 16,
+      paddingBottom: 12,
     },
     searchBar: {
       flex: 1,
@@ -411,7 +329,7 @@ const createStyles = (COLORS, SPACING, FONTS, BORDER_RADIUS) =>
       borderWidth: 1,
       borderColor: COLORS.border,
       paddingHorizontal: 10,
-      height: 38,
+      height: 40,
     },
     searchInput: {
       flex: 1,
@@ -428,100 +346,113 @@ const createStyles = (COLORS, SPACING, FONTS, BORDER_RADIUS) =>
       borderColor: COLORS.border,
       borderRadius: BORDER_RADIUS.md,
       paddingHorizontal: 9,
-      height: 38,
+      height: 40,
     },
     chainIcon: { width: 20, height: 20, borderRadius: 10 },
     walletPill: {
       flexDirection: "row",
       alignItems: "center",
       gap: 5,
-      backgroundColor: COLORS.success + "18",
+      backgroundColor: accent + "18",
       borderRadius: BORDER_RADIUS.md,
       paddingHorizontal: 9,
-      height: 38,
+      height: 40,
     },
     dot: {
       width: 7,
       height: 7,
       borderRadius: 4,
-      backgroundColor: COLORS.success,
+      backgroundColor: accent,
     },
     walletPillText: {
       fontSize: 12,
-      color: COLORS.success,
+      color: accent,
       fontFamily: "monospace",
       fontWeight: "600",
     },
     connectPill: {
-      backgroundColor: COLORS.primary,
+      backgroundColor: accent,
       borderRadius: BORDER_RADIUS.md,
       paddingHorizontal: 12,
-      height: 38,
+      height: 40,
       justifyContent: "center",
     },
     connectPillText: {
       fontSize: 13,
-      color: COLORS.background,
+      color: "#0a0a0a",
       fontWeight: "700",
     },
 
     // ── Quick Access ────────────────────────────────────────────────────────
     quickRow: {
       flexDirection: "row",
-      paddingHorizontal: 12,
+      paddingHorizontal: 16,
       gap: 8,
-      marginBottom: 10,
+      marginBottom: 16,
     },
     quickBtn: {
       flex: 1,
       alignItems: "center",
-      gap: 4,
+      gap: 6,
       backgroundColor: COLORS.card,
       borderWidth: 1,
       borderColor: COLORS.border,
-      borderRadius: BORDER_RADIUS.md,
-      paddingVertical: 10,
+      borderRadius: BORDER_RADIUS.lg,
+      paddingVertical: 12,
     },
-    quickLabel: { fontSize: 11, color: COLORS.text, fontWeight: "500" },
+    quickIconCircle: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: accent + "18",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    quickLabel: { fontSize: 11, color: COLORS.text, fontWeight: "600" },
 
     // ── Divider ─────────────────────────────────────────────────────────────
-    divider: { height: 1, marginHorizontal: 12, marginVertical: 6 },
+    divider: { height: 1, marginHorizontal: 16, marginVertical: 8, backgroundColor: COLORS.border },
 
-    // ── Section row ─────────────────────────────────────────────────────────
-    sectionRow: { marginBottom: 6 },
+    // ── Section block ───────────────────────────────────────────────────────
+    sectionBlock: { marginBottom: 8 },
     sectionLabelRow: {
       flexDirection: "row",
       alignItems: "center",
-      paddingHorizontal: 12,
-      marginBottom: 6,
+      gap: 6,
+      paddingHorizontal: 16,
+      marginBottom: 10,
     },
     sectionLabel: {
       fontSize: 12,
       fontWeight: "700",
       color: COLORS.textSecondary,
       textTransform: "uppercase",
-      letterSpacing: 0.5,
-      paddingHorizontal: 12,
-      paddingTop: 9,
-      paddingBottom: 6,
+      letterSpacing: 0.6,
     },
-    hScroll: { paddingHorizontal: 12, gap: 8 },
+    hScroll: { paddingHorizontal: 16, gap: 10 },
 
     // ── App chip ────────────────────────────────────────────────────────────
     appChip: {
       alignItems: "center",
-      gap: 5,
-      width: 70,
+      gap: 6,
+      width: 72,
     },
-    appChipLogo: {
-      width: 46,
-      height: 46,
-      borderRadius: BORDER_RADIUS.md,
+    appChipLogoWrap: {
+      width: 52,
+      height: 52,
+      borderRadius: BORDER_RADIUS.lg,
+      backgroundColor: COLORS.card,
+      borderWidth: 1,
+      borderColor: COLORS.border,
+      alignItems: "center",
+      justifyContent: "center",
+      overflow: "hidden",
     },
+    appChipLogo: { width: 52, height: 52 },
     appChipText: {
       fontSize: 11,
       color: COLORS.text,
-      fontWeight: "500",
+      fontWeight: "600",
       textAlign: "center",
     },
 
@@ -536,7 +467,7 @@ const createStyles = (COLORS, SPACING, FONTS, BORDER_RADIUS) =>
       borderRadius: BORDER_RADIUS.md,
       paddingHorizontal: 10,
       paddingVertical: 8,
-      minWidth: 145,
+      minWidth: 150,
     },
     coinLogo: { width: 30, height: 30, borderRadius: 15 },
     coinInfo: { flex: 1 },
@@ -547,11 +478,9 @@ const createStyles = (COLORS, SPACING, FONTS, BORDER_RADIUS) =>
       paddingVertical: 3,
       borderRadius: 5,
     },
-    posBadge: { backgroundColor: COLORS.success + "18" },
+    posBadge: { backgroundColor: accent + "18" },
     negBadge: { backgroundColor: COLORS.error + "18" },
     changeText: { fontSize: 11, fontWeight: "700" },
-    posText: { color: COLORS.success },
-    negText: { color: COLORS.error },
 
     // ── Footer ──────────────────────────────────────────────────────────────
     footer: {

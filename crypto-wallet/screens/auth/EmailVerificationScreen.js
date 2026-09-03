@@ -10,6 +10,7 @@ import { sendEmailVerification, reload } from 'firebase/auth';
 import { doc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../../services/Firebase';
 import Alert from '../../utils/Alert';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -21,11 +22,13 @@ const EmailVerificationScreen = () => {
   const {  refreshUserData } = useAuth();
   const [countdown, setCountdown] = useState(0);
    const { COLORS, SPACING, FONTS } = useTheme();
+   const insets = useSafeAreaInsets();
    
    const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+    paddingTop: insets.top,
   },
   content: {
     flex: 1,
@@ -156,6 +159,14 @@ const EmailVerificationScreen = () => {
       await reload(currentUser);
 
       if (currentUser.emailVerified) {
+        // reload() updates currentUser.emailVerified locally but does NOT
+        // refresh the cached ID token — Firestore rules check
+        // request.auth.token.email_verified, which stays stale (false)
+        // until the token is force-refreshed. Without this, the write
+        // below fails with "Missing or insufficient permissions" even
+        // though the user really is verified.
+        await currentUser.getIdToken(true);
+
         // Update Firestore user document
         const userRef = doc(db, 'users', currentUser.uid);
         await updateDoc(userRef, { emailVerified: true });

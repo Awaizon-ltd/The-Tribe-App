@@ -4,14 +4,14 @@
     "slug": "the-tribe-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/icon-lime.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "scheme": "thetribe",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0d1017"
+      "backgroundColor": "#D6FF00"
     },
     "ios": {
       "supportsTablet": true,
@@ -26,7 +26,7 @@
       "package": "com.awarizon.tribe",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#D6FF00"
       },
       "edgeToEdgeEnabled": true,
       "intentFilters": [
@@ -83,7 +83,7 @@
             {
               "scheme": "https",
               "host": "sysfidao.com",
-              "pathPrefix": "/guild"
+              "pathPrefix": "/tribe"
             }
           ]
         },
@@ -113,7 +113,7 @@
             {
               "scheme": "https",
               "host": "sysfidao.com",
-              "pathPrefix": "/guilds"
+              "pathPrefix": "/tribes"
             }
           ]
         },
@@ -204,7 +204,8 @@
           "borderColor": "#0d1017"
         }
       ],
-      "expo-font"
+      "expo-font",
+      "expo-web-browser"
     ],
     "runtimeVersion": {
       "policy": "appVersion"

@@ -489,5 +489,6 @@ export default {
   repostPost, hasUserReposted,
   addComment, getComments, deleteComment,
   addImpression,
+  formatPost,
   ensureGuildIndexes,
 };

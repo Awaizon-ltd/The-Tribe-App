@@ -1,0 +1,13 @@
+{
+  "name": "miniapp-sdk-test-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Standalone consumer app used to verify @tribe/miniapp-sdk installs and works correctly via npm, outside the main monorepo's own dependency tree.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/"
+  },
+  "dependencies": {
+    "@tribe/miniapp-sdk": "file:../miniapp-sdk"
+  }
+}

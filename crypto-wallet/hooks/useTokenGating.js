@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { ethers } from "ethers";
 import { useWallet } from "../contexts/WalletContext";
-import api from "../services/GuildApiService";
+import api from "../services/TribeApiService";
 
 const ERC20_ABI = [
   "function balanceOf(address owner) view returns (uint256)",
@@ -19,16 +19,16 @@ const ERC721_ABI = [
 /**
  * Resolves token-gating config and checks whether the user holds the required token.
  *
- * @param {string}  guildId           - Guild ID
+ * @param {string}  tribeId           - Tribe ID
  * @param {object}  user              - Firebase auth user
  * @param {string}  address           - User's wallet address
  * @param {string}  privacy           - "public" | "private"
  * @param {boolean} isMember          - Whether the user is already a member
- * @param {object}  initialTokenGating - Token gating data already available from the guild object
- *                                       (avoids an extra API call if the parent already fetched the guild)
+ * @param {object}  initialTokenGating - Token gating data already available from the tribe object
+ *                                       (avoids an extra API call if the parent already fetched the tribe)
  */
 export const useTokenGating = (
-  guildId,
+  tribeId,
   user,
   address,
   privacy,
@@ -52,9 +52,9 @@ export const useTokenGating = (
       setTokenMetaLoading(false);
       return;
     }
-    if (!guildId) return;
+    if (!tribeId) return;
     fetchTokenGatingData();
-  }, [guildId]);
+  }, [tribeId]);
 
   // ── Trigger balance check once config + address are ready ────────────────────
   useEffect(() => {
@@ -71,9 +71,9 @@ export const useTokenGating = (
 
   const fetchTokenGatingData = async () => {
     try {
-      const guildData = await api.getGuild(guildId);
+      const tribeData = await api.getTribe(tribeId);
       // Backend returns token_gating (snake_case JSONB) or tokenGating (camelCase)
-      const tg = guildData?.token_gating || guildData?.tokenGating || null;
+      const tg = tribeData?.token_gating || tribeData?.tokenGating || null;
       setTokenGatingData(tg);
     } catch (error) {
       console.error("Error fetching token gating data:", error);

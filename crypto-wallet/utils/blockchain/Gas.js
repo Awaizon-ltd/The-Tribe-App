@@ -33,7 +33,6 @@ const BLOCK_TIME_SECONDS = {
   5000: 2, // Mantle
   10: 2, // Optimism
   11155111: 12, // Sepolia
-  84532: 2, // Base Sepolia
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

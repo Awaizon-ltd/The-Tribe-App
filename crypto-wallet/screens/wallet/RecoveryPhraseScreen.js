@@ -11,6 +11,7 @@ import {
 import * as Clipboard from "expo-clipboard";
 import * as SecureStore from "expo-secure-store";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../../contexts/ThemeContext";
 import { APP_CONFIG } from "../../constants/Config";
 import Button from "../../components/common/Button";
@@ -22,6 +23,7 @@ import Alert from "../../utils/Alert";
 const RecoveryPhraseScreen = ({ navigation }) => {
   const theme = useTheme();
   const styles = createStyles(theme);
+  const insets = useSafeAreaInsets();
   const [showWarning, setShowWarning] = useState(true);
   const [pin, setPin] = useState("");
   const [pinError, setPinError] = useState(false);
@@ -330,7 +332,7 @@ const RecoveryPhraseScreen = ({ navigation }) => {
   if (!showMnemonic) {
     return (
       <View style={styles.container}>
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
           <TouchableOpacity onPress={handleGoBack} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={theme.COLORS.text} />
           </TouchableOpacity>

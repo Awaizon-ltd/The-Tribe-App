@@ -20,7 +20,7 @@ import { uploadImageToCloudinary } from '../../services/ImageUploadServices'; //
 import { useTheme } from '../../contexts/ThemeContext'; // Adjust path as needed
 import Alert from '../../utils/Alert';
 
-const CreatePostModal = ({ visible, onClose, onCreate, guildId }) => {
+const CreatePostModal = ({ visible, onClose, onCreate, tribeId }) => {
   const theme = useTheme();
   const styles = createStyles(theme);
   
@@ -90,8 +90,8 @@ const CreatePostModal = ({ visible, onClose, onCreate, guildId }) => {
 
     try {
       // Uploads via backend-signed request → Cloudinary (see CloudinaryService).
-      // folder mirrors the old Firebase path convention: posts/{guildId}/...
-      const { url } = await uploadImageToCloudinary(imageUri, `posts/${guildId}`);
+      // folder mirrors the old Firebase path convention: posts/{tribeId}/...
+      const { url } = await uploadImageToCloudinary(imageUri, `posts/${tribeId}`);
       return url;
     } catch (error) {
       console.error('Error uploading image:', error);
@@ -180,7 +180,7 @@ const CreatePostModal = ({ visible, onClose, onCreate, guildId }) => {
           >
             <TextInput
               style={styles.input}
-              placeholder="What's happening in the guild?"
+              placeholder="What's happening in the tribe?"
               placeholderTextColor={theme.COLORS.textSecondary}
               multiline
               value={description}

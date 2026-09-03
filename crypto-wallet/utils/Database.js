@@ -127,7 +127,7 @@ export const initDatabase = async () => {
         UNIQUE(user_id, chain_id, address)
       );
       
-      CREATE TABLE IF NOT EXISTS guilds (
+      CREATE TABLE IF NOT EXISTS tribes (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         description TEXT,
@@ -150,14 +150,14 @@ export const initDatabase = async () => {
         last_synced DATETIME DEFAULT CURRENT_TIMESTAMP
       );
       
-      CREATE TABLE IF NOT EXISTS guild_members (
-        guild_id TEXT NOT NULL,
+      CREATE TABLE IF NOT EXISTS tribe_members (
+        tribe_id TEXT NOT NULL,
         user_uid TEXT NOT NULL,
         username TEXT,
         status TEXT,
         joined_at DATETIME,
-        PRIMARY KEY (guild_id, user_uid),
-        FOREIGN KEY (guild_id) REFERENCES guilds (id) ON DELETE CASCADE
+        PRIMARY KEY (tribe_id, user_uid),
+        FOREIGN KEY (tribe_id) REFERENCES tribes (id) ON DELETE CASCADE
       );
     `);
     
@@ -216,7 +216,7 @@ const runMigrations = async (currentVersion) => {
       await db.execAsync(`
         CREATE TABLE IF NOT EXISTS chat_messages (
           id TEXT PRIMARY KEY,
-          guild_id TEXT NOT NULL,
+          tribe_id TEXT NOT NULL,
           text TEXT NOT NULL,
           user_id TEXT NOT NULL,
           username TEXT NOT NULL,
@@ -228,23 +228,23 @@ const runMigrations = async (currentVersion) => {
           pinned_at INTEGER,
           pinned_by TEXT,
           reply_to TEXT,
-          FOREIGN KEY (guild_id) REFERENCES guilds (id) ON DELETE CASCADE
+          FOREIGN KEY (tribe_id) REFERENCES tribes (id) ON DELETE CASCADE
         );
         
         CREATE TABLE IF NOT EXISTS chat_settings (
-          guild_id TEXT PRIMARY KEY,
+          tribe_id TEXT PRIMARY KEY,
           is_locked INTEGER DEFAULT 0,
           message_delay INTEGER DEFAULT 0,
           updated_at INTEGER,
           updated_by TEXT,
-          FOREIGN KEY (guild_id) REFERENCES guilds (id) ON DELETE CASCADE
+          FOREIGN KEY (tribe_id) REFERENCES tribes (id) ON DELETE CASCADE
         );
         
         CREATE TABLE IF NOT EXISTS chat_sync_state (
-          guild_id TEXT PRIMARY KEY,
+          tribe_id TEXT PRIMARY KEY,
           last_sync_timestamp INTEGER NOT NULL,
           oldest_message_timestamp INTEGER,
-          FOREIGN KEY (guild_id) REFERENCES guilds (id) ON DELETE CASCADE
+          FOREIGN KEY (tribe_id) REFERENCES tribes (id) ON DELETE CASCADE
         );
       `);
       
@@ -258,12 +258,12 @@ const runMigrations = async (currentVersion) => {
       
       await db.execAsync(`
         CREATE TABLE IF NOT EXISTS chat_read_status (
-          guild_id TEXT NOT NULL,
+          tribe_id TEXT NOT NULL,
           user_uid TEXT NOT NULL,
           last_read_timestamp INTEGER NOT NULL,
           last_read_message_id TEXT,
-          PRIMARY KEY (guild_id, user_uid),
-          FOREIGN KEY (guild_id) REFERENCES guilds (id) ON DELETE CASCADE
+          PRIMARY KEY (tribe_id, user_uid),
+          FOREIGN KEY (tribe_id) REFERENCES tribes (id) ON DELETE CASCADE
         );
       `);
       
@@ -271,14 +271,14 @@ const runMigrations = async (currentVersion) => {
 
     }
     
-    // Migration to version 5: Add guild management tables
+    // Migration to version 5: Add tribe management tables
     if (currentVersion < 5) {
     
       
       await db.execAsync(`
-        CREATE TABLE IF NOT EXISTS guild_moderators (
+        CREATE TABLE IF NOT EXISTS tribe_moderators (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
-          guild_id TEXT NOT NULL,
+          tribe_id TEXT NOT NULL,
           user_uid TEXT NOT NULL,
           username TEXT NOT NULL,
           user_avatar TEXT,
@@ -290,13 +290,13 @@ const runMigrations = async (currentVersion) => {
           can_manage_members INTEGER DEFAULT 0,
           added_at INTEGER NOT NULL,
           added_by TEXT NOT NULL,
-          UNIQUE(guild_id, user_uid),
-          FOREIGN KEY (guild_id) REFERENCES guilds (id) ON DELETE CASCADE
+          UNIQUE(tribe_id, user_uid),
+          FOREIGN KEY (tribe_id) REFERENCES tribes (id) ON DELETE CASCADE
         );
         
-        CREATE TABLE IF NOT EXISTS guild_invites (
+        CREATE TABLE IF NOT EXISTS tribe_invites (
           id TEXT PRIMARY KEY,
-          guild_id TEXT NOT NULL,
+          tribe_id TEXT NOT NULL,
           code TEXT UNIQUE NOT NULL,
           created_by TEXT NOT NULL,
           created_at INTEGER NOT NULL,
@@ -304,11 +304,11 @@ const runMigrations = async (currentVersion) => {
           max_uses INTEGER,
           uses INTEGER DEFAULT 0,
           is_active INTEGER DEFAULT 1,
-          FOREIGN KEY (guild_id) REFERENCES guilds (id) ON DELETE CASCADE
+          FOREIGN KEY (tribe_id) REFERENCES tribes (id) ON DELETE CASCADE
         );
         
-        CREATE TABLE IF NOT EXISTS guild_external_links (
-          guild_id TEXT PRIMARY KEY,
+        CREATE TABLE IF NOT EXISTS tribe_external_links (
+          tribe_id TEXT PRIMARY KEY,
           website_url TEXT,
           twitter_url TEXT,
           discord_url TEXT,
@@ -316,23 +316,23 @@ const runMigrations = async (currentVersion) => {
           other_links TEXT,
           updated_at INTEGER,
           updated_by TEXT,
-          FOREIGN KEY (guild_id) REFERENCES guilds (id) ON DELETE CASCADE
+          FOREIGN KEY (tribe_id) REFERENCES tribes (id) ON DELETE CASCADE
         );
       `);
       
       // Check if column exists before adding
-      const guildTableInfo = await db.getAllAsync('PRAGMA table_info(guilds)');
-      const guildColumns = guildTableInfo.map(col => col.name);
+      const tribeTableInfo = await db.getAllAsync('PRAGMA table_info(tribes)');
+      const tribeColumns = tribeTableInfo.map(col => col.name);
       
-      if (!guildColumns.includes('settings_synced_at')) {
-        await db.execAsync('ALTER TABLE guilds ADD COLUMN settings_synced_at INTEGER DEFAULT 0');
+      if (!tribeColumns.includes('settings_synced_at')) {
+        await db.execAsync('ALTER TABLE tribes ADD COLUMN settings_synced_at INTEGER DEFAULT 0');
       }
       
       await db.execAsync(`
-        CREATE INDEX IF NOT EXISTS idx_guild_moderators_guild ON guild_moderators(guild_id);
-        CREATE INDEX IF NOT EXISTS idx_guild_moderators_user ON guild_moderators(guild_id, user_uid);
-        CREATE INDEX IF NOT EXISTS idx_guild_invites_code ON guild_invites(code);
-        CREATE INDEX IF NOT EXISTS idx_guild_invites_guild ON guild_invites(guild_id);
+        CREATE INDEX IF NOT EXISTS idx_tribe_moderators_tribe ON tribe_moderators(tribe_id);
+        CREATE INDEX IF NOT EXISTS idx_tribe_moderators_user ON tribe_moderators(tribe_id, user_uid);
+        CREATE INDEX IF NOT EXISTS idx_tribe_invites_code ON tribe_invites(code);
+        CREATE INDEX IF NOT EXISTS idx_tribe_invites_tribe ON tribe_invites(tribe_id);
       `);
       
       await db.execAsync('PRAGMA user_version = 5');
@@ -344,9 +344,9 @@ const runMigrations = async (currentVersion) => {
      
       
       await db.execAsync(`
-        CREATE TABLE IF NOT EXISTS guild_posts (
+        CREATE TABLE IF NOT EXISTS tribe_posts (
           id TEXT PRIMARY KEY,
-          guild_id TEXT NOT NULL,
+          tribe_id TEXT NOT NULL,
           user_id TEXT NOT NULL,
           username TEXT NOT NULL,
           user_avatar TEXT,
@@ -359,24 +359,24 @@ const runMigrations = async (currentVersion) => {
           created_at INTEGER NOT NULL,
           updated_at INTEGER,
           is_deleted INTEGER DEFAULT 0,
-          FOREIGN KEY (guild_id) REFERENCES guilds (id) ON DELETE CASCADE
+          FOREIGN KEY (tribe_id) REFERENCES tribes (id) ON DELETE CASCADE
         );
         
         CREATE TABLE IF NOT EXISTS post_likes (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           post_id TEXT NOT NULL,
-          guild_id TEXT NOT NULL,
+          tribe_id TEXT NOT NULL,
           user_id TEXT NOT NULL,
           username TEXT NOT NULL,
           liked_at INTEGER NOT NULL,
           UNIQUE(post_id, user_id),
-          FOREIGN KEY (post_id) REFERENCES guild_posts (id) ON DELETE CASCADE
+          FOREIGN KEY (post_id) REFERENCES tribe_posts (id) ON DELETE CASCADE
         );
         
         CREATE TABLE IF NOT EXISTS post_comments (
           id TEXT PRIMARY KEY,
           post_id TEXT NOT NULL,
-          guild_id TEXT NOT NULL,
+          tribe_id TEXT NOT NULL,
           user_id TEXT NOT NULL,
           username TEXT NOT NULL,
           user_avatar TEXT,
@@ -384,17 +384,17 @@ const runMigrations = async (currentVersion) => {
           created_at INTEGER NOT NULL,
           updated_at INTEGER,
           is_deleted INTEGER DEFAULT 0,
-          FOREIGN KEY (post_id) REFERENCES guild_posts (id) ON DELETE CASCADE
+          FOREIGN KEY (post_id) REFERENCES tribe_posts (id) ON DELETE CASCADE
         );
         
         CREATE TABLE IF NOT EXISTS post_sync_state (
-          guild_id TEXT PRIMARY KEY,
+          tribe_id TEXT PRIMARY KEY,
           last_sync_timestamp INTEGER NOT NULL,
           oldest_post_timestamp INTEGER
         );
         
-        CREATE INDEX IF NOT EXISTS idx_guild_posts_guild ON guild_posts(guild_id, created_at DESC);
-        CREATE INDEX IF NOT EXISTS idx_guild_posts_user ON guild_posts(user_id);
+        CREATE INDEX IF NOT EXISTS idx_tribe_posts_tribe ON tribe_posts(tribe_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_tribe_posts_user ON tribe_posts(user_id);
         CREATE INDEX IF NOT EXISTS idx_post_likes_post ON post_likes(post_id);
         CREATE INDEX IF NOT EXISTS idx_post_likes_user ON post_likes(user_id);
         CREATE INDEX IF NOT EXISTS idx_post_comments_post ON post_comments(post_id, created_at DESC);
@@ -635,14 +635,14 @@ const createIndexes = async () => {
       CREATE INDEX IF NOT EXISTS idx_transactions_tx_hash ON transactions(tx_hash);
       CREATE INDEX IF NOT EXISTS idx_contacts_user_id ON contacts(user_id);
       CREATE INDEX IF NOT EXISTS idx_tokens_user_chain ON tokens(user_id, chain_id);
-      CREATE INDEX IF NOT EXISTS idx_guilds_member ON guilds(is_member);
-      CREATE INDEX IF NOT EXISTS idx_guilds_pinned ON guilds(is_pinned, pin_order);
-      CREATE INDEX IF NOT EXISTS idx_guilds_genre ON guilds(genre);
-      CREATE INDEX IF NOT EXISTS idx_guilds_updated ON guilds(updated_at);
-      CREATE INDEX IF NOT EXISTS idx_guild_members_guild ON guild_members(guild_id);
-      CREATE INDEX IF NOT EXISTS idx_chat_messages_guild ON chat_messages(guild_id, created_at DESC);
-      CREATE INDEX IF NOT EXISTS idx_chat_messages_user ON chat_messages(guild_id, user_id);
-      CREATE INDEX IF NOT EXISTS idx_chat_messages_pinned ON chat_messages(guild_id, is_pinned, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_tribes_member ON tribes(is_member);
+      CREATE INDEX IF NOT EXISTS idx_tribes_pinned ON tribes(is_pinned, pin_order);
+      CREATE INDEX IF NOT EXISTS idx_tribes_genre ON tribes(genre);
+      CREATE INDEX IF NOT EXISTS idx_tribes_updated ON tribes(updated_at);
+      CREATE INDEX IF NOT EXISTS idx_tribe_members_tribe ON tribe_members(tribe_id);
+      CREATE INDEX IF NOT EXISTS idx_chat_messages_tribe ON chat_messages(tribe_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_chat_messages_user ON chat_messages(tribe_id, user_id);
+      CREATE INDEX IF NOT EXISTS idx_chat_messages_pinned ON chat_messages(tribe_id, is_pinned, created_at DESC);
     `);
     console.log('[Database] ✅ Indexes created');
   } catch (error) {
@@ -962,30 +962,30 @@ export const showToken = async (tokenId) => {
   await db.runAsync('UPDATE tokens SET is_visible = 1 WHERE id = ?', [tokenId]);
 };
 
-// ============ GUILD OPERATIONS ============
+// ============ TRIBE OPERATIONS ============
 
-export const saveGuildToCache = async (guildData, isMember = false) => {
+export const saveTribeToCache = async (tribeData, isMember = false) => {
   const db = getDatabase();
-  const tokenGating = guildData.tokenGating || {};
+  const tokenGating = tribeData.tokenGating || {};
   
   const result = await db.runAsync(
-    `INSERT OR REPLACE INTO guilds (
+    `INSERT OR REPLACE INTO tribes (
       id, name, description, genre, logo_url, banner_url, privacy, member_count, 
       created_by, created_at, updated_at, token_gating_type, token_gating_address, 
       token_gating_amount, token_gating_name, token_gating_symbol, is_member, last_synced
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
     [
-      guildData.id,
-      guildData.name,
-      guildData.description,
-      guildData.genre,
-      guildData.logoUrl,
-      guildData.bannerUrl,
-      guildData.privacy,
-      guildData.memberCount,
-      guildData.createdBy,
-      guildData.createdAt instanceof Date ? guildData.createdAt.toISOString() : guildData.createdAt,
-      guildData.updatedAt instanceof Date ? guildData.updatedAt.toISOString() : guildData.updatedAt,
+      tribeData.id,
+      tribeData.name,
+      tribeData.description,
+      tribeData.genre,
+      tribeData.logoUrl,
+      tribeData.bannerUrl,
+      tribeData.privacy,
+      tribeData.memberCount,
+      tribeData.createdBy,
+      tribeData.createdAt instanceof Date ? tribeData.createdAt.toISOString() : tribeData.createdAt,
+      tribeData.updatedAt instanceof Date ? tribeData.updatedAt.toISOString() : tribeData.updatedAt,
       tokenGating.tokenType || null,
       tokenGating.tokenAddress || null,
       tokenGating.minTokenAmount || null,
@@ -997,28 +997,28 @@ export const saveGuildToCache = async (guildData, isMember = false) => {
   return result.lastInsertRowId;
 };
 
-export const getUserGuilds = async (sortByRecent = true) => {
+export const getUserTribes = async (sortByRecent = true) => {
   const db = getDatabase();
   const orderBy = sortByRecent 
     ? 'is_pinned DESC, pin_order ASC, updated_at DESC' 
     : 'is_pinned DESC, pin_order ASC, name ASC';
   
   return await db.getAllAsync(
-    `SELECT * FROM guilds WHERE is_member = 1 ORDER BY ${orderBy}`
+    `SELECT * FROM tribes WHERE is_member = 1 ORDER BY ${orderBy}`
   );
 };
 
-export const getTopGuilds = async (limit = 5) => {
+export const getTopTribes = async (limit = 5) => {
   const db = getDatabase();
   return await db.getAllAsync(
-    'SELECT * FROM guilds ORDER BY member_count DESC LIMIT ?',
+    'SELECT * FROM tribes ORDER BY member_count DESC LIMIT ?',
     [limit]
   );
 };
 
-export const searchGuilds = async (query, genre = null) => {
+export const searchTribes = async (query, genre = null) => {
   const db = getDatabase();
-  let sql = 'SELECT * FROM guilds WHERE (name LIKE ? OR description LIKE ?)';
+  let sql = 'SELECT * FROM tribes WHERE (name LIKE ? OR description LIKE ?)';
   const params = [`%${query}%`, `%${query}%`];
   
   if (genre) {
@@ -1031,73 +1031,73 @@ export const searchGuilds = async (query, genre = null) => {
   return await db.getAllAsync(sql, params);
 };
 
-export const getGuildById = async (guildId) => {
+export const getTribeById = async (tribeId) => {
   const db = getDatabase();
-  return await db.getFirstAsync('SELECT * FROM guilds WHERE id = ?', [guildId]);
+  return await db.getFirstAsync('SELECT * FROM tribes WHERE id = ?', [tribeId]);
 };
 
-export const togglePinGuild = async (guildId) => {
+export const togglePinTribe = async (tribeId) => {
   const db = getDatabase();
-  const guild = await getGuildById(guildId);
-  if (!guild) return;
+  const tribe = await getTribeById(tribeId);
+  if (!tribe) return;
   
-  if (guild.is_pinned) {
+  if (tribe.is_pinned) {
     await db.runAsync(
-      'UPDATE guilds SET is_pinned = 0, pin_order = NULL WHERE id = ?',
-      [guildId]
+      'UPDATE tribes SET is_pinned = 0, pin_order = NULL WHERE id = ?',
+      [tribeId]
     );
     await db.runAsync(
-      'UPDATE guilds SET pin_order = pin_order - 1 WHERE is_pinned = 1 AND pin_order > ?',
-      [guild.pin_order]
+      'UPDATE tribes SET pin_order = pin_order - 1 WHERE is_pinned = 1 AND pin_order > ?',
+      [tribe.pin_order]
     );
   } else {
     const pinned = await db.getAllAsync(
-      'SELECT * FROM guilds WHERE is_pinned = 1 ORDER BY pin_order'
+      'SELECT * FROM tribes WHERE is_pinned = 1 ORDER BY pin_order'
     );
     
     if (pinned.length >= 2) {
-      throw new Error('Maximum 2 guilds can be pinned');
+      throw new Error('Maximum 2 tribes can be pinned');
     }
     
     const nextOrder = pinned.length;
     await db.runAsync(
-      'UPDATE guilds SET is_pinned = 1, pin_order = ? WHERE id = ?',
-      [nextOrder, guildId]
+      'UPDATE tribes SET is_pinned = 1, pin_order = ? WHERE id = ?',
+      [nextOrder, tribeId]
     );
   }
 };
 
-export const updateGuildMemberStatus = async (guildId, isMember) => {
+export const updateTribeMemberStatus = async (tribeId, isMember) => {
   const db = getDatabase();
   await db.runAsync(
-    'UPDATE guilds SET is_member = ? WHERE id = ?',
-    [isMember ? 1 : 0, guildId]
+    'UPDATE tribes SET is_member = ? WHERE id = ?',
+    [isMember ? 1 : 0, tribeId]
   );
 };
 
-export const deleteGuildFromCache = async (guildId) => {
+export const deleteTribeFromCache = async (tribeId) => {
   const db = getDatabase();
-  await db.runAsync('DELETE FROM guilds WHERE id = ?', [guildId]);
+  await db.runAsync('DELETE FROM tribes WHERE id = ?', [tribeId]);
 };
 
-export const clearGuildCache = async () => {
+export const clearTribeCache = async () => {
   const db = getDatabase();
-  await db.execAsync('DELETE FROM guilds; DELETE FROM guild_members;');
+  await db.execAsync('DELETE FROM tribes; DELETE FROM tribe_members;');
 };
 
 // ============ CHAT MESSAGE OPERATIONS ============
 
-export const cacheMessage = async (guildId, message) => {
+export const cacheMessage = async (tribeId, message) => {
   const db = getDatabase();
   
   await db.runAsync(
     `INSERT OR REPLACE INTO chat_messages 
-    (id, guild_id, text, user_id, username, display_name, user_avatar, created_at, edited_at, 
+    (id, tribe_id, text, user_id, username, display_name, user_avatar, created_at, edited_at, 
      is_edited, is_pinned, pinned_at, pinned_by, reply_to) 
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       message.id,
-      guildId,
+      tribeId,
       message.text,
       message.userId,
       message.username,
@@ -1114,21 +1114,21 @@ export const cacheMessage = async (guildId, message) => {
   );
 };
 
-export const batchCacheMessages = async (guildId, messages) => {
+export const batchCacheMessages = async (tribeId, messages) => {
   const db = getDatabase();
   
   await db.withTransactionAsync(async () => {
     for (const message of messages) {
-      await cacheMessage(guildId, message);
+      await cacheMessage(tribeId, message);
     }
   });
 };
 
-export const getCachedMessages = async (guildId, limit = 30, beforeTimestamp = null) => {
+export const getCachedMessages = async (tribeId, limit = 30, beforeTimestamp = null) => {
   const db = getDatabase();
   
-  let query = 'SELECT * FROM chat_messages WHERE guild_id = ?';
-  const params = [guildId];
+  let query = 'SELECT * FROM chat_messages WHERE tribe_id = ?';
+  const params = [tribeId];
   
   if (beforeTimestamp) {
     query += ' AND created_at < ?';
@@ -1157,14 +1157,14 @@ export const getCachedMessages = async (guildId, limit = 30, beforeTimestamp = n
   }));
 };
 
-export const getCachedPinnedMessages = async (guildId) => {
+export const getCachedPinnedMessages = async (tribeId) => {
   const db = getDatabase();
   
   const results = await db.getAllAsync(
     `SELECT * FROM chat_messages 
-     WHERE guild_id = ? AND is_pinned = 1 
+     WHERE tribe_id = ? AND is_pinned = 1 
      ORDER BY pinned_at DESC`,
-    [guildId]
+    [tribeId]
   );
   
   return results.map(row => ({
@@ -1184,7 +1184,7 @@ export const getCachedPinnedMessages = async (guildId) => {
   }));
 };
 
-export const updateCachedMessage = async (guildId, messageId, updates) => {
+export const updateCachedMessage = async (tribeId, messageId, updates) => {
   const db = getDatabase();
   const fields = [];
   const values = [];
@@ -1213,34 +1213,34 @@ export const updateCachedMessage = async (guildId, messageId, updates) => {
   
   if (fields.length === 0) return;
   
-  values.push(guildId, messageId);
+  values.push(tribeId, messageId);
   
   await db.runAsync(
-    `UPDATE chat_messages SET ${fields.join(', ')} WHERE guild_id = ? AND id = ?`,
+    `UPDATE chat_messages SET ${fields.join(', ')} WHERE tribe_id = ? AND id = ?`,
     values
   );
 };
 
-export const deleteCachedMessage = async (guildId, messageId) => {
+export const deleteCachedMessage = async (tribeId, messageId) => {
   const db = getDatabase();
-  await db.runAsync('DELETE FROM chat_messages WHERE guild_id = ? AND id = ?', [guildId, messageId]);
+  await db.runAsync('DELETE FROM chat_messages WHERE tribe_id = ? AND id = ?', [tribeId, messageId]);
 };
 
-export const deleteCachedUserMessages = async (guildId, userId) => {
+export const deleteCachedUserMessages = async (tribeId, userId) => {
   const db = getDatabase();
-  await db.runAsync('DELETE FROM chat_messages WHERE guild_id = ? AND user_id = ?', [guildId, userId]);
+  await db.runAsync('DELETE FROM chat_messages WHERE tribe_id = ? AND user_id = ?', [tribeId, userId]);
 };
 
-export const clearCachedMessages = async (guildId) => {
+export const clearCachedMessages = async (tribeId) => {
   const db = getDatabase();
-  await db.runAsync('DELETE FROM chat_messages WHERE guild_id = ?', [guildId]);
+  await db.runAsync('DELETE FROM chat_messages WHERE tribe_id = ?', [tribeId]);
 };
 
-export const getChatSettings = async (guildId) => {
+export const getChatSettings = async (tribeId) => {
   const db = getDatabase();
   const result = await db.getFirstAsync(
-    'SELECT * FROM chat_settings WHERE guild_id = ?',
-    [guildId]
+    'SELECT * FROM chat_settings WHERE tribe_id = ?',
+    [tribeId]
   );
   
   if (!result) return null;
@@ -1253,15 +1253,15 @@ export const getChatSettings = async (guildId) => {
   };
 };
 
-export const saveChatSettings = async (guildId, settings) => {
+export const saveChatSettings = async (tribeId, settings) => {
   const db = getDatabase();
   
   await db.runAsync(
     `INSERT OR REPLACE INTO chat_settings 
-    (guild_id, is_locked, message_delay, updated_at, updated_by) 
+    (tribe_id, is_locked, message_delay, updated_at, updated_by) 
     VALUES (?, ?, ?, ?, ?)`,
     [
-      guildId,
+      tribeId,
       settings.isLocked ? 1 : 0,
       settings.messageDelay || 0,
       Date.now(),
@@ -1270,11 +1270,11 @@ export const saveChatSettings = async (guildId, settings) => {
   );
 };
 
-export const getSyncState = async (guildId) => {
+export const getSyncState = async (tribeId) => {
   const db = getDatabase();
   const result = await db.getFirstAsync(
-    'SELECT * FROM chat_sync_state WHERE guild_id = ?',
-    [guildId]
+    'SELECT * FROM chat_sync_state WHERE tribe_id = ?',
+    [tribeId]
   );
   
   if (!result) return null;
@@ -1285,35 +1285,35 @@ export const getSyncState = async (guildId) => {
   };
 };
 
-export const updateSyncState = async (guildId, lastSyncTimestamp, oldestMessageTimestamp = null) => {
+export const updateSyncState = async (tribeId, lastSyncTimestamp, oldestMessageTimestamp = null) => {
   const db = getDatabase();
   
   await db.runAsync(
     `INSERT OR REPLACE INTO chat_sync_state 
-    (guild_id, last_sync_timestamp, oldest_message_timestamp) 
+    (tribe_id, last_sync_timestamp, oldest_message_timestamp) 
     VALUES (?, ?, ?)`,
     [
-      guildId,
+      tribeId,
       lastSyncTimestamp,
       oldestMessageTimestamp || lastSyncTimestamp,
     ]
   );
 };
 
-export const getCachedMessageCount = async (guildId) => {
+export const getCachedMessageCount = async (tribeId) => {
   const db = getDatabase();
   const result = await db.getFirstAsync(
-    'SELECT COUNT(*) as count FROM chat_messages WHERE guild_id = ?',
-    [guildId]
+    'SELECT COUNT(*) as count FROM chat_messages WHERE tribe_id = ?',
+    [tribeId]
   );
   return result.count;
 };
 
-export const messageExistsInCache = async (guildId, messageId) => {
+export const messageExistsInCache = async (tribeId, messageId) => {
   const db = getDatabase();
   const result = await db.getFirstAsync(
-    'SELECT COUNT(*) as count FROM chat_messages WHERE guild_id = ? AND id = ?',
-    [guildId, messageId]
+    'SELECT COUNT(*) as count FROM chat_messages WHERE tribe_id = ? AND id = ?',
+    [tribeId, messageId]
   );
   return result.count > 0;
 };
@@ -1328,7 +1328,7 @@ export const clearOldMessages = async (daysOld = 30) => {
   );
 };
 
-export const getCacheStats = async (guildId) => {
+export const getCacheStats = async (tribeId) => {
   const db = getDatabase();
   
   const stats = await db.getFirstAsync(`
@@ -1338,8 +1338,8 @@ export const getCacheStats = async (guildId) => {
       MAX(created_at) as newest_message,
       SUM(LENGTH(text)) as total_size
     FROM chat_messages
-    WHERE guild_id = ?
-  `, [guildId]);
+    WHERE tribe_id = ?
+  `, [tribeId]);
   
   return {
     messageCount: stats.message_count,
@@ -1393,8 +1393,8 @@ export const clearAllData = async () => {
     DELETE FROM transactions;
     DELETE FROM wallets;
     DELETE FROM users;
-    DELETE FROM guilds;
-    DELETE FROM guild_members;
+    DELETE FROM tribes;
+    DELETE FROM tribe_members;
     DELETE FROM chat_messages;
     DELETE FROM chat_settings;
     DELETE FROM chat_sync_state;
@@ -1429,15 +1429,15 @@ export default {
   deleteToken,
   hideToken,
   showToken,
-  saveGuildToCache,
-  getUserGuilds,
-  getTopGuilds,
-  searchGuilds,
-  getGuildById,
-  togglePinGuild,
-  updateGuildMemberStatus,
-  deleteGuildFromCache,
-  clearGuildCache,
+  saveTribeToCache,
+  getUserTribes,
+  getTopTribes,
+  searchTribes,
+  getTribeById,
+  togglePinTribe,
+  updateTribeMemberStatus,
+  deleteTribeFromCache,
+  clearTribeCache,
   cacheMessage,
   batchCacheMessages,
   getCachedMessages,

@@ -20,22 +20,32 @@ import {
   Animated,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { formatUnits } from "ethers";
 import ChainIcon from "../../components/common/ChainIcon";
 import Svg, { Polyline, Polygon, Defs, LinearGradient as SvgGradient, Stop } from "react-native-svg";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useWallet } from "../../contexts/WalletContext";
 import { useChain } from "../../contexts/ChainContext";
+import { useAppMode } from "../../contexts/AppModeContext";
 import { useSwap } from "../../hooks/useSwap";
-import { TokenSelectorModal } from "../../components/swap/TokenSelectorModal";
+import { useCrossChainSwap } from "../../hooks/useCrossChainSwap";
+import AssetCard from "../../components/swap/AssetCard";
+import AssetPickerModal from "../../components/swap/AssetPickerModal";
 import { SwapConfirmModal } from "../../components/swap/SwapConfirmModal";
+import CrossChainConfirmModal from "../../components/swap/CrossChainConfirmModal";
 import ChainSwitcher from "../../components/wallet/ChainSwitcher";
 import TabHeader from "../../components/common/TabHeader";
+import { getMainnetChains } from "../../constants/Chain";
 // ✅ Pull balance utils directly — no WalletContext wrapper needed
 import {
   getTokenBalance as fetchERC20Balance,
   getNativeBalance,
 } from "../../utils/blockchain/Balances";
-import { getAllNativePricesByChainId } from "../../services/coingecko";
+import {
+  getAllNativePricesByChainId,
+  getTopTradedByChain,
+  getCoinDetail,
+} from "../../services/CoinGeckoService";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const SLIPPAGE_OPTIONS = [0.005, 0.01, 0.02, 0.05];
@@ -55,35 +65,11 @@ const CHAIN_PLATFORM = {
   43114: 'avalanche',
   8453:  'base',
 };
-// CoinGecko category slugs for chain-specific top-traded
-const CHAIN_CATEGORY = {
-  1:     'ethereum-ecosystem',
-  137:   'polygon-ecosystem',
-  42161: 'arbitrum-ecosystem',
-  43114: 'avalanche-ecosystem',
-  8453:  'base-ecosystem',
-};
-
-const fetchTopTokensByChain = async (chainId, limit = 10) => {
-  const category = CHAIN_CATEGORY[chainId];
-  if (!category) return [];
-  const url =
-    `https://api.coingecko.com/api/v3/coins/markets` +
-    `?vs_currency=usd&category=${category}&order=volume_desc` +
-    `&per_page=${limit}&page=1&sparkline=true&price_change_percentage=24h`;
-  const res = await fetch(url);
-  const raw = await res.json();
-  if (!Array.isArray(raw)) return [];
-  return raw.map((c) => ({
-    id:        c.id,
-    symbol:    c.symbol,
-    name:      c.name,
-    image:     c.image,
-    price:     c.current_price,
-    change24h: c.price_change_percentage_24h,
-    sparkline: c.sparkline_in_7d?.price ?? [],
-  }));
-};
+// Top-traded-by-chain and coin-detail lookups are now proxied through the
+// backend (services/CoinGeckoService.js's getTopTradedByChain/getCoinDetail)
+// instead of hitting api.coingecko.com directly from the device — the
+// CHAIN_CATEGORY→category-slug mapping this used to need client-side now
+// lives server-side in backend/src/controllers/coingeckoController.js.
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const safeFloat = (val) => {
@@ -113,6 +99,20 @@ const fmtPrice = (n) => {
   return "$" + n.toFixed(4);
 };
 
+// Cross-chain quotes only ever move native tokens (see AssetPickerModal's
+// native-only bridging note), and the app's native-token convention is
+// always 18 decimals (constants/Chain.js) — safe to hardcode here the same
+// way the old CrossChainPanel did.
+const getCrossChainReceiveEstimate = (quote) => {
+  if (!quote?.estimate?.toAmount) return null;
+  try {
+    const val = parseFloat(formatUnits(String(quote.estimate.toAmount), 18));
+    return val.toFixed(6);
+  } catch {
+    return null;
+  }
+};
+
 const NUMPAD_KEYS = [["1","2","3"],["4","5","6"],["7","8","9"],[".","0","⌫"]];
 
 // ─── useDebounce ──────────────────────────────────────────────────────────────
@@ -124,49 +124,6 @@ function useDebounce(value, delay = 400) {
   }, [value, delay]);
   return debounced;
 }
-
-// ─── TokenLogo ────────────────────────────────────────────────────────────────
-const TokenLogo = memo(({ logoURI, symbol, size = 28, theme }) => {
-  const [imgError, setImgError] = useState(false);
-  const { COLORS } = theme;
-
-  const styles = useMemo(
-    () =>
-      StyleSheet.create({
-        image: { width: size, height: size, borderRadius: size / 2 },
-        fallback: {
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-          backgroundColor: COLORS.primaryMuted,
-          alignItems: "center",
-          justifyContent: "center",
-        },
-        fallbackText: {
-          fontSize: size * 0.4,
-          fontWeight: "800",
-          color: COLORS.primaryDark,
-        },
-      }),
-    [size, COLORS],
-  );
-
-  if (logoURI && !imgError) {
-    return (
-      <Image
-        source={{ uri: logoURI }}
-        style={styles.image}
-        onError={() => setImgError(true)}
-        fadeDuration={0}
-      />
-    );
-  }
-  return (
-    <View style={styles.fallback}>
-      <Text style={styles.fallbackText}>{symbol?.charAt(0) ?? "?"}</Text>
-    </View>
-  );
-});
 
 // ─── SlippageSelector ─────────────────────────────────────────────────────────
 const SlippageSelector = memo(({ slippage, onSelect, theme }) => {
@@ -244,7 +201,7 @@ const SlippageSelector = memo(({ slippage, onSelect, theme }) => {
           paddingHorizontal: SPACING.md,
         },
         confirmBtnText: {
-          color: COLORS.background,
+          color: COLORS.onPrimary,
           fontWeight: "700",
           fontSize: FONTS.sizes.sm,
         },
@@ -313,264 +270,6 @@ const SlippageSelector = memo(({ slippage, onSelect, theme }) => {
         </View>
       )}
     </View>
-  );
-});
-
-// ─── TokenInputBox ────────────────────────────────────────────────────────────
-const TokenInputBox = memo(
-  ({
-    label,
-    token,
-    amount,
-    onAmountChange,
-    onTokenPress,
-    isReadOnly,
-    isFetching,
-    balance,
-    usdPrice,
-    onPercentPress,
-    activePct,
-    isNativeSell,
-    theme,
-  }) => {
-    const { COLORS, SPACING, FONTS, BORDER_RADIUS, SHADOWS } = theme;
-
-    const styles = useMemo(
-      () =>
-        StyleSheet.create({
-          container: { padding: SPACING.md },
-          header: {
-            flexDirection: "row",
-            justifyContent: "space-between",
-            alignItems: "flex-start",
-            marginBottom: SPACING.sm,
-          },
-          label: {
-            fontSize: FONTS.sizes.xs,
-            fontWeight: "700",
-            color: COLORS.textTertiary,
-            textTransform: "uppercase",
-            letterSpacing: 0.8,
-          },
-          balanceCol: { alignItems: "flex-end", gap: 5 },
-          balanceText: {
-            fontSize: FONTS.sizes.xs,
-            color: COLORS.textSecondary,
-          },
-          pctRow: {
-            flexDirection: "row",
-            gap: 4,
-          },
-          pctBtn: {
-            paddingHorizontal: 8,
-            paddingVertical: 3,
-            borderRadius: 6,
-            backgroundColor: COLORS.background,
-            borderWidth: 1,
-            borderColor: COLORS.border,
-          },
-          pctBtnActive: {
-            backgroundColor: COLORS.primaryMuted,
-            borderColor: COLORS.primary,
-          },
-          pctBtnText: {
-            fontSize: 11,
-            fontWeight: "700",
-            color: COLORS.textSecondary,
-          },
-          pctBtnTextActive: {
-            color: COLORS.primaryDark,
-          },
-          gasNote: {
-            fontSize: 10,
-            color: COLORS.textTertiary,
-            fontStyle: "italic",
-          },
-          body: { flexDirection: "row", alignItems: "center" },
-          inputWrapper: { flex: 1 },
-          input: {
-            fontSize: FONTS.sizes.xxl,
-            fontWeight: "700",
-            color: COLORS.text,
-            padding: 0,
-            minHeight: 44,
-          },
-          inputReadOnly: { color: COLORS.textSecondary },
-          usdLabel: {
-            fontSize: FONTS.sizes.xs,
-            color: COLORS.textTertiary,
-            marginTop: 2,
-          },
-          tokenSelector: {
-            flexDirection: "row",
-            alignItems: "center",
-            backgroundColor: COLORS.card,
-            borderRadius: BORDER_RADIUS.lg,
-            paddingVertical: SPACING.sm,
-            paddingHorizontal: SPACING.sm,
-            gap: SPACING.xs,
-            borderWidth: 1,
-            borderColor: COLORS.borderStrong,
-            minWidth: 100,
-            ...SHADOWS.small,
-          },
-          tokenSymbol: {
-            fontSize: FONTS.sizes.md,
-            fontWeight: "700",
-            color: COLORS.text,
-          },
-          tokenPlaceholder: {
-            fontSize: FONTS.sizes.sm,
-            color: COLORS.primary,
-            fontWeight: "700",
-          },
-        }),
-      [theme],
-    );
-
-    const usdLabel = useMemo(
-      () => formatUsd(amount, usdPrice),
-      [amount, usdPrice],
-    );
-    const balanceLabel = useMemo(() => formatBalance(balance), [balance]);
-    const showPct = !isReadOnly && !!onPercentPress && safeFloat(balance) > 0 && !!token;
-
-    return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.label}>{label}</Text>
-          {token && (
-            <View style={styles.balanceCol}>
-              <Text style={styles.balanceText}>Balance: {balanceLabel}</Text>
-              {showPct && (
-                <View style={styles.pctRow}>
-                  {PCT_OPTIONS.map(({ label: pLabel, value }) => (
-                    <TouchableOpacity
-                      key={pLabel}
-                      style={[styles.pctBtn, activePct === value && styles.pctBtnActive]}
-                      onPress={() => onPercentPress(value)}
-                      hitSlop={{ top: 4, bottom: 4, left: 2, right: 2 }}
-                    >
-                      <Text style={[styles.pctBtnText, activePct === value && styles.pctBtnTextActive]}>
-                        {pLabel}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-              {showPct && isNativeSell && (
-                <Text style={styles.gasNote}>⛽ MAX keeps ~1% for gas</Text>
-              )}
-            </View>
-          )}
-        </View>
-
-        <View style={styles.body}>
-          <View style={styles.inputWrapper}>
-            {isFetching ? (
-              <ActivityIndicator
-                size="small"
-                color={COLORS.primary}
-                style={{ alignSelf: "flex-start" }}
-              />
-            ) : (
-              <>
-                <TextInput
-                  style={[styles.input, isReadOnly && styles.inputReadOnly]}
-                  placeholder="0.0"
-                  placeholderTextColor={COLORS.textTertiary}
-                  keyboardType="decimal-pad"
-                  value={amount}
-                  onChangeText={onAmountChange}
-                  editable={!isReadOnly}
-                />
-                {usdLabel ? (
-                  <Text style={styles.usdLabel}>{usdLabel}</Text>
-                ) : null}
-              </>
-            )}
-          </View>
-
-          <TouchableOpacity
-            style={styles.tokenSelector}
-            onPress={onTokenPress}
-            activeOpacity={0.75}
-          >
-            {token ? (
-              <>
-                <TokenLogo
-                  logoURI={token.logoURI}
-                  symbol={token.symbol}
-                  size={26}
-                  theme={theme}
-                />
-                <Text style={styles.tokenSymbol}>{token.symbol}</Text>
-              </>
-            ) : (
-              <Text style={styles.tokenPlaceholder}>Select</Text>
-            )}
-            <Ionicons
-              name="chevron-down"
-              size={14}
-              color={COLORS.textSecondary}
-            />
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  },
-);
-
-// ─── ChainButton ──────────────────────────────────────────────────────────────
-const ChainButton = memo(({ chain, onPress, theme }) => {
-  const { COLORS, SPACING, BORDER_RADIUS } = theme;
-  const [iconError, setIconError] = useState(false);
-
-  const styles = useMemo(
-    () =>
-      StyleSheet.create({
-        btn: {
-          flexDirection: "row",
-          alignItems: "center",
-          gap: SPACING.xs,
-          paddingVertical: SPACING.sm,
-          paddingHorizontal: SPACING.sm,
-          borderRadius: BORDER_RADIUS.md,
-          backgroundColor: COLORS.surface,
-          borderWidth: 1,
-          borderColor: COLORS.border,
-        },
-        icon: { width: 18, height: 18, borderRadius: 9 },
-        iconFallback: {
-          width: 18,
-          height: 18,
-          borderRadius: 9,
-          backgroundColor: COLORS.primaryMuted,
-          alignItems: "center",
-          justifyContent: "center",
-        },
-        iconFallbackText: {
-          fontSize: 9,
-          fontWeight: "800",
-          color: COLORS.primaryDark,
-        },
-      }),
-    [theme],
-  );
-
-  return (
-    <TouchableOpacity style={styles.btn} onPress={onPress} activeOpacity={0.75}>
-      {true ? (
-        <ChainIcon chain={chain} size={18} style={styles.icon} />
-      ) : (
-        <View style={styles.iconFallback}>
-          <Text style={styles.iconFallbackText}>
-            {chain?.name?.charAt(0) ?? "?"}
-          </Text>
-        </View>
-      )}
-      <Ionicons name="chevron-down" size={11} color={COLORS.textSecondary} />
-    </TouchableOpacity>
   );
 });
 
@@ -722,86 +421,128 @@ const Numpad = memo(({ onPress, theme }) => {
   );
 });
 
-// ─── SwapTokenCard ────────────────────────────────────────────────────────────
-const SwapTokenCard = memo(({ token, priceUsd, change24h, onPress, isCurrent, isLast, theme }) => {
-  const { COLORS, SPACING, FONTS, BORDER_RADIUS } = theme;
-  const isPos = (change24h ?? 0) >= 0;
-
-  return (
-    <TouchableOpacity
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        paddingHorizontal: SPACING.md,
-        paddingVertical: 11,
-        borderBottomWidth: isLast ? 0 : StyleSheet.hairlineWidth,
-        borderBottomColor: COLORS.border + "60",
-        opacity: isCurrent ? 0.4 : 1,
-      }}
-      onPress={onPress}
-      disabled={isCurrent}
-      activeOpacity={0.7}
-    >
-      <TokenLogo logoURI={token.logoURI} symbol={token.symbol} size={38} theme={theme} />
-
-      <View style={{ flex: 1, marginLeft: SPACING.sm }}>
-        <Text style={{ fontSize: FONTS.sizes.sm, fontWeight: "700", color: COLORS.text }}>
-          {token.symbol}
-        </Text>
-        <Text style={{ fontSize: FONTS.sizes.xs, color: COLORS.textTertiary }} numberOfLines={1}>
-          {token.name}
-        </Text>
-      </View>
-
-      {priceUsd != null ? (
-        <View style={{ alignItems: "flex-end", gap: 2 }}>
-          <Text style={{ fontSize: FONTS.sizes.sm, fontWeight: "600", color: COLORS.text }}>
-            {priceUsd >= 1
-              ? `$${priceUsd.toLocaleString("en-US", { maximumFractionDigits: 2 })}`
-              : `$${priceUsd.toFixed(4)}`}
-          </Text>
-          {change24h != null && (
-            <Text style={{ fontSize: 11, fontWeight: "700", color: isPos ? COLORS.primary : COLORS.error }}>
-              {isPos ? "+" : ""}{change24h.toFixed(2)}%
-            </Text>
-          )}
-        </View>
-      ) : (
-        <View style={{
-          flexDirection: "row", alignItems: "center", gap: 4,
-          backgroundColor: COLORS.primaryMuted,
-          borderRadius: BORDER_RADIUS.md,
-          paddingHorizontal: SPACING.sm, paddingVertical: SPACING.xs,
-        }}>
-          <Ionicons name="add" size={13} color={COLORS.primaryDark} />
-          <Text style={{ fontSize: FONTS.sizes.xs, fontWeight: "700", color: COLORS.primaryDark }}>
-            Buy
-          </Text>
-        </View>
-      )}
-    </TouchableOpacity>
-  );
-});
-
 // ─── SwapScreen ───────────────────────────────────────────────────────────────
 export default function SwapScreen() {
   const theme = useTheme();
   const { COLORS, SPACING, FONTS, BORDER_RADIUS, SHADOWS } = theme;
 
-  const { activeChain } = useChain();
+  const { activeChain, switchChainById } = useChain();
   // ✅ Only need wallet.address from context — balance fetching goes direct to util
   const { wallet } = useWallet();
+  const { isCommunityMode } = useAppMode();
   const swap = useSwap();
+  const crossChainSwap = useCrossChainSwap();
 
-  const [showSellSelector, setShowSellSelector] = useState(false);
-  const [showBuySelector, setShowBuySelector] = useState(false);
+  // One brand color everywhere — Robinhood lime, same in wallet and
+  // community mode. accentMuted replaces the nonexistent
+  // theme.COLORS.primaryMuted this file used throughout (that token was
+  // never defined in constants/Theme.js, so every "active" pill/badge/
+  // banner background using it was silently rendering with no background
+  // fill at all — a real pre-existing bug, fixed as part of threading this
+  // accent through).
+  const accentColor = COLORS.primary;
+  const accentMuted = accentColor + "18";
+  // Sub-components below take a `theme` prop and read theme.COLORS.primary/
+  // primaryMuted/primaryDark internally — passing this instead of the raw
+  // `theme` object re-points those reads at the mode-correct accent without
+  // touching any of those components' own code.
+  const accentTheme = useMemo(
+    () => ({
+      ...theme,
+      COLORS: { ...COLORS, primary: accentColor, primaryMuted: accentMuted, primaryDark: accentColor },
+    }),
+    [theme, accentColor, accentMuted],
+  );
+
   const [showConfirm, setShowConfirm] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showChainSwitcher, setShowChainSwitcher] = useState(false);
+  const [showCrossChainConfirm, setShowCrossChainConfirm] = useState(false);
   const [currentQuote, setCurrentQuote] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [sellBalance, setSellBalance] = useState("0");
   const [buyBalance, setBuyBalance] = useState("0");
+
+  // ── Unified from/to state ────────────────────────────────────────────────
+  // "From" is never separate state — it IS activeChain (picking a different
+  // chain on the From card switches the active chain immediately, see
+  // handleFromAssetSelect below). "To" is the only genuinely new piece of
+  // state; it starts equal to activeChain so the screen opens as a same-chain
+  // swap, and only diverges once the user picks a different chain there.
+  //
+  // It deliberately does NOT auto-follow activeChain if that changes through
+  // an unrelated path (the header network pill, ChainSwitcher) — collapsing
+  // it on every unrelated chain change would silently discard an in-progress
+  // bridge selection (e.g. the user taps the header to check another chain's
+  // balance mid-bridge, then comes back).
+  const [toChain, setToChain] = useState(() => activeChain);
+  const fromChain = activeChain;
+  const isCrossChainMode = !!fromChain && !!toChain && fromChain.id !== toChain.id;
+
+  const [activePicker, setActivePicker] = useState(null); // 'from' | 'to' | null
+
+  // Keep the LI.FI hook's native tokens in sync with the from/to chains —
+  // covers paths that change them without going through the picker (the
+  // flip button). AssetPickerModal also commits a native token directly on
+  // pick, so this is a safety net, not the only place tokens get set.
+  useEffect(() => {
+    if (!fromChain || !toChain) return;
+    crossChainSwap.setFromChain(fromChain);
+    crossChainSwap.setToChain(toChain);
+    crossChainSwap.setFromToken({
+      name: fromChain.nativeTokenName ?? "Ether",
+      symbol: fromChain.symbol,
+      address: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+      decimals: 18,
+      isNative: true,
+      logoURI: fromChain.icon,
+      chainId: fromChain.id,
+    });
+    crossChainSwap.setToToken({
+      name: toChain.nativeTokenName ?? "Ether",
+      symbol: toChain.symbol,
+      address: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+      decimals: 18,
+      isNative: true,
+      logoURI: toChain.icon,
+      chainId: toChain.id,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromChain?.id, toChain?.id]);
+
+  // Native balance of the chain actually being spent from — distinct from
+  // `sellBalance` below, which tracks whatever (possibly non-native)
+  // swap.sellToken currently is.
+  const [fromNativeBalance, setFromNativeBalance] = useState("0");
+  useEffect(() => {
+    let cancelled = false;
+    if (!isCrossChainMode || !fromChain || !wallet?.address) return;
+    getNativeBalance(wallet.address, fromChain)
+      .then((bal) => { if (!cancelled) setFromNativeBalance(bal?.formatted ?? "0"); })
+      .catch(() => { if (!cancelled) setFromNativeBalance("0"); });
+    return () => { cancelled = true; };
+  }, [isCrossChainMode, fromChain?.id, wallet?.address]);
+
+  // Debounced cross-chain quote fetch (ported from the old CrossChainPanel,
+  // which owned this itself — now that both modes share one widget, the
+  // screen drives both engines' quote fetching).
+  const ccQuoteDebounceRef = useRef(null);
+  useEffect(() => {
+    if (ccQuoteDebounceRef.current) clearTimeout(ccQuoteDebounceRef.current);
+    if (!isCrossChainMode) return;
+    const amt = crossChainSwap.fromAmount;
+    if (!amt || parseFloat(amt) <= 0 || !wallet?.address || !fromChain || !toChain) return;
+    ccQuoteDebounceRef.current = setTimeout(() => {
+      crossChainSwap.fetchQuote(wallet.address).catch(() => {});
+    }, 600);
+    return () => clearTimeout(ccQuoteDebounceRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCrossChainMode, crossChainSwap.fromAmount, wallet?.address, fromChain?.id, toChain?.id]);
+
+  // Full mainnet chain list for both pickers — deliberately unfiltered by
+  // activeChain (unlike the old counterpart-only picker) so either card can
+  // be set to match the other and collapse back into a same-chain swap.
+  const pickerChains = useMemo(() => getMainnetChains(), []);
 
   // ── Numpad visibility ────────────────────────────────────────────────────────
   const [showNumpad, setShowNumpad] = useState(false);
@@ -816,7 +557,10 @@ export default function SwapScreen() {
   const bannerAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Skip the very first mount — only show on actual switches.
+    // Skip the very first mount — only show on actual switches. Fires
+    // for every activeChain change regardless of source (header pill,
+    // ChainSwitcher, or our own auto-switch below) — this is what the
+    // From-card auto-switch relies on for its "toast".
     if (prevChainIdRef.current !== null && prevChainIdRef.current !== activeChain?.id) {
       setBannerName(activeChain?.name ?? '');
       Animated.timing(bannerAnim, { toValue: 1, duration: 220, useNativeDriver: true }).start();
@@ -844,75 +588,6 @@ export default function SwapScreen() {
 
         // ── Swap widget ──────────────────────────────────────────────────────────
         swapWidget: { marginBottom: SPACING.xs, gap: 4 },
-
-        // Individual input card — borderless, slim
-        inputCard: {
-          backgroundColor: COLORS.surface,
-          borderRadius: BORDER_RADIUS.xl,
-          paddingHorizontal: 14,
-          paddingTop: 8,
-          paddingBottom: 8,
-          ...SHADOWS.small,
-        },
-        inputCardRow: {
-          flexDirection: "row",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 6,
-        },
-        inputLabel: {
-          fontSize: FONTS.sizes.xs,
-          fontWeight: "700",
-          color: COLORS.textTertiary,
-          textTransform: "uppercase",
-          letterSpacing: 0.9,
-        },
-        inputBalance: {
-          fontSize: FONTS.sizes.xs,
-          color: COLORS.textSecondary,
-          marginTop: 4,
-        },
-
-        // Token chip
-        tokenChip: {
-          flexDirection: "row",
-          alignItems: "center",
-          backgroundColor: COLORS.card,
-          borderRadius: 24,
-          paddingVertical: 6,
-          paddingHorizontal: 10,
-          gap: 5,
-          ...SHADOWS.small,
-        },
-        tokenChipText: { fontSize: FONTS.sizes.sm, fontWeight: "800", color: COLORS.text },
-        tokenChipSelect: { fontSize: FONTS.sizes.sm, fontWeight: "800", color: COLORS.primary },
-
-        // PCT buttons row
-        pctRow: { flexDirection: "row", gap: 5 },
-        pctBtn: {
-          paddingHorizontal: 9,
-          paddingVertical: 4,
-          borderRadius: 7,
-          backgroundColor: COLORS.background,
-          borderWidth: 1,
-          borderColor: COLORS.border,
-        },
-        pctBtnActive: { backgroundColor: COLORS.primaryMuted, borderColor: COLORS.primary },
-        pctBtnText: { fontSize: 10, fontWeight: "700", color: COLORS.textSecondary },
-        pctBtnTextActive: { color: COLORS.primaryDark },
-
-        // Amount display
-        amountBig: {
-          fontSize: 34,
-          fontWeight: "800",
-          color: COLORS.text,
-          letterSpacing: -1,
-          includeFontPadding: false,
-          marginBottom: 1,
-        },
-        amountUsd: { fontSize: FONTS.sizes.xs, color: COLORS.textTertiary },
-        fetchingText: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary },
-        gasNote: { fontSize: 10, color: COLORS.textTertiary, fontStyle: "italic", marginTop: 2 },
 
         // Bridge swap button — sits between the two cards, overlapping both
         bridgeRow: {
@@ -948,6 +623,19 @@ export default function SwapScreen() {
           fontSize: FONTS.sizes.xs,
           color: COLORS.textSecondary,
         },
+        pctRow: { flexDirection: "row", gap: 5 },
+        pctBtn: {
+          paddingHorizontal: 9,
+          paddingVertical: 4,
+          borderRadius: 7,
+          backgroundColor: COLORS.background,
+          borderWidth: 1,
+          borderColor: COLORS.border,
+        },
+        pctBtnActive: { backgroundColor: accentMuted, borderColor: accentColor },
+        pctBtnText: { fontSize: 10, fontWeight: "700", color: COLORS.textSecondary },
+        pctBtnTextActive: { color: accentColor },
+        gasNote: { fontSize: 10, color: COLORS.textTertiary, fontStyle: "italic", marginTop: 2 },
 
         // Error banner
         errorBanner: {
@@ -961,7 +649,7 @@ export default function SwapScreen() {
 
         // Swap action button
         swapActionBtn: {
-          backgroundColor: COLORS.primary,
+          backgroundColor: accentColor,
           borderRadius: BORDER_RADIUS.xl,
           paddingVertical: SPACING.md + 2,
           alignItems: "center", justifyContent: "center",
@@ -972,7 +660,7 @@ export default function SwapScreen() {
         swapActionBtnInsufficient: { backgroundColor: COLORS.error },
         swapActionBtnText: {
           fontSize: FONTS.sizes.lg, fontWeight: "800",
-          color: "#fff", letterSpacing: 0.3,
+          color: COLORS.onPrimary, letterSpacing: 0.3,
         },
 
         // Powered by
@@ -1000,10 +688,10 @@ export default function SwapScreen() {
         trendingItemPrice: { fontSize: FONTS.sizes.sm, fontWeight: "600", color: COLORS.text },
         trendingItemChange: { fontSize: 11, fontWeight: "700" },
       }),
-    [theme],
+    [theme, accentColor, accentMuted],
   );
 
-  // ── Balance fetching ─────────────────────────────────────────────────────────
+  // ── Balance fetching (same-chain widget) ─────────────────────────────────────
   const fetchBalance = useCallback(
     async (token, abortRef, setter) => {
       if (abortRef.current) abortRef.current.abort();
@@ -1068,7 +756,7 @@ export default function SwapScreen() {
     let cancelled = false;
     setLoadingTrending(true);
     setTrendingCoins([]);
-    fetchTopTokensByChain(activeChain.id)
+    getTopTradedByChain(activeChain.id)
       .then((coins) => { if (!cancelled) setTrendingCoins(coins); })
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoadingTrending(false); });
@@ -1088,15 +776,70 @@ export default function SwapScreen() {
     return () => anim.stop();
   }, [showNumpad]);
 
-  // ── Debounced price fetch ────────────────────────────────────────────────────
+  // ── Debounced price fetch (same-chain / 0x) ──────────────────────────────────
   const debouncedSellAmount = useDebounce(swap.sellAmount, 400);
   useEffect(() => {
+    if (isCrossChainMode) return;
     if (safeFloat(debouncedSellAmount) > 0 && swap.sellToken && swap.buyToken) {
       swap.fetchPrice?.();
     }
-  }, [debouncedSellAmount, swap.sellToken?.address, swap.buyToken?.address]);
+  }, [isCrossChainMode, debouncedSellAmount, swap.sellToken?.address, swap.buyToken?.address]);
+
+  // ── From/To derived display state ───────────────────────────────────────────
+  const fromToken = isCrossChainMode ? crossChainSwap.fromToken : swap.sellToken;
+  const toToken = isCrossChainMode ? crossChainSwap.toToken : swap.buyToken;
+  const fromAmount = isCrossChainMode ? crossChainSwap.fromAmount : swap.sellAmount;
+  const toAmountEstimate = isCrossChainMode
+    ? (getCrossChainReceiveEstimate(crossChainSwap.quote) ?? "")
+    : swap.buyAmountEstimate;
+  const fromBalance = isCrossChainMode ? fromNativeBalance : sellBalance;
+  const isFetchingFromToken = isCrossChainMode ? false : swap.loadingTokens;
+  const isFetchingToEstimate = isCrossChainMode ? crossChainSwap.isFetchingQuote : swap.isFetchingPrice;
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
+  const handleFromAssetSelect = useCallback(
+    async (chain, token) => {
+      if (chain.id !== activeChain.id) {
+        try {
+          await switchChainById(chain.id);
+        } catch (err) {
+          console.warn("[SwapScreen] chain switch failed:", err.message);
+          return;
+        }
+      }
+      if (chain.id === toChain.id) swap.setSellToken(token);
+      else crossChainSwap.setFromToken(token);
+    },
+    [activeChain, toChain, switchChainById, swap, crossChainSwap],
+  );
+
+  const handleToAssetSelect = useCallback(
+    (chain, token) => {
+      setToChain(chain);
+      if (chain.id === activeChain.id) swap.setBuyToken(token);
+      else crossChainSwap.setToToken(token);
+    },
+    [activeChain, swap, crossChainSwap],
+  );
+
+  const handleFlip = useCallback(async () => {
+    if (!isCrossChainMode) {
+      swap.flipTokens();
+      return;
+    }
+    const newActiveChainId = toChain.id; // pre-flip "to" becomes the new active/from chain
+    const newToChain = fromChain;        // pre-flip active chain becomes the new "to"
+    setToChain(newToChain);
+    const estimate = getCrossChainReceiveEstimate(crossChainSwap.quote);
+    crossChainSwap.setFromAmount(estimate ?? "");
+    try {
+      await switchChainById(newActiveChainId);
+    } catch (err) {
+      console.warn("[SwapScreen] flip chain switch failed:", err.message);
+      setToChain(fromChain); // revert
+    }
+  }, [isCrossChainMode, toChain, fromChain, crossChainSwap, switchChainById]);
+
   const handleSwapPress = useCallback(async () => {
     try {
       const quote = await swap.fetchQuote();
@@ -1106,6 +849,12 @@ export default function SwapScreen() {
       console.error("[SwapScreen] quote error:", err);
     }
   }, [swap.fetchQuote]);
+
+  const handleBridgePress = useCallback(() => {
+    setShowCrossChainConfirm(true);
+  }, []);
+
+  const handleActionPress = isCrossChainMode ? handleBridgePress : handleSwapPress;
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -1125,49 +874,35 @@ export default function SwapScreen() {
     fetchBalance(swap.buyToken, buyAbortRef, setBuyBalance);
   }, [swap.setSellAmount, swap.sellToken, swap.buyToken, fetchBalance]);
 
-  const handleSellTokenSelect = useCallback(
-    (token) => {
-      swap.setSellToken(token);
-      if (swap.buyToken?.address === token.address) swap.setBuyToken(null);
-      setShowSellSelector(false);
+  const handleFromAmountChange = useCallback(
+    (val) => {
+      setActivePct(null);
+      if (isCrossChainMode) crossChainSwap.setFromAmount(val);
+      else swap.setSellAmount(val);
     },
-    [swap.buyToken?.address],
-  );
-
-  const handleBuyTokenSelect = useCallback(
-    (token) => {
-      swap.setBuyToken(token);
-      if (swap.sellToken?.address === token.address) swap.setSellToken(null);
-      setShowBuySelector(false);
-    },
-    [swap.sellToken?.address],
-  );
-
-  const handleSellAmountChange = useCallback(
-    (val) => { setActivePct(null); swap.setSellAmount(val); },
-    [swap.setSellAmount],
+    [isCrossChainMode, crossChainSwap.setFromAmount, swap.setSellAmount],
   );
 
   const handleNumpadPress = useCallback((key) => {
     setActivePct(null);
-    const prev = swap.sellAmount || "";
-    if (key === "⌫") { swap.setSellAmount(prev.slice(0, -1)); return; }
+    const prev = fromAmount || "";
+    const setter = isCrossChainMode ? crossChainSwap.setFromAmount : swap.setSellAmount;
+    if (key === "⌫") { setter(prev.slice(0, -1)); return; }
     if (key === "." && prev.includes(".")) return;
-    if (key === "." && prev === "") { swap.setSellAmount("0."); return; }
-    if (prev === "0" && key !== ".") { swap.setSellAmount(key); return; }
-    swap.setSellAmount(prev + key);
-  }, [swap.sellAmount, swap.setSellAmount]);
+    if (key === "." && prev === "") { setter("0."); return; }
+    if (prev === "0" && key !== ".") { setter(key); return; }
+    setter(prev + key);
+  }, [fromAmount, isCrossChainMode, crossChainSwap.setFromAmount, swap.setSellAmount]);
 
   const handleTrendingTokenPress = useCallback(async (coin) => {
+    if (isCrossChainMode) return; // trending only shown in same-chain mode
     const platform = CHAIN_PLATFORM[activeChain?.id];
     if (!platform) return;
     try {
-      const res = await fetch(
-        `https://api.coingecko.com/api/v3/coins/${coin.id}?localization=false&tickers=false&market_data=false&community_data=false&developer_data=false`,
-      );
-      const data = await res.json();
+      const data = await getCoinDetail(coin.id);
+      if (!data) return;
       const contractAddress =
-        data.detail_platforms?.[platform]?.contract_address ||
+        data.detailPlatforms?.[platform]?.contract_address ||
         data.platforms?.[platform];
       if (contractAddress) {
         swap.setBuyToken({
@@ -1175,7 +910,7 @@ export default function SwapScreen() {
           symbol: coin.symbol?.toUpperCase(),
           name: coin.name,
           logoURI: coin.image,
-          decimals: data.detail_platforms?.[platform]?.decimal_place ?? 18,
+          decimals: data.detailPlatforms?.[platform]?.decimal_place ?? 18,
           isNative: false,
         });
       } else {
@@ -1186,25 +921,27 @@ export default function SwapScreen() {
         if (native) swap.setBuyToken(native);
       }
     } catch { /* fail silently */ }
-  }, [activeChain?.id, swap.setBuyToken, swap.tokenList]);
+  }, [isCrossChainMode, activeChain?.id, swap.setBuyToken, swap.tokenList]);
 
   const handlePercentPress = useCallback(
     (pct) => {
       setActivePct(pct);
-      const bal = safeFloat(sellBalance);
+      const bal = safeFloat(fromBalance);
+      const isNativeFrom = isCrossChainMode ? true : swap.sellToken?.isNative;
+      const setter = isCrossChainMode ? crossChainSwap.setFromAmount : swap.setSellAmount;
       if (pct === 1.0) {
-        if (swap.sellToken?.isNative) {
+        if (isNativeFrom) {
           // Keep GAS_RESERVE_FRAC as a gas buffer
           const safe = Math.max(bal * (1 - GAS_RESERVE_FRAC), 0);
-          swap.setSellAmount(safe > 0 ? safe.toFixed(6) : "0");
+          setter(safe > 0 ? safe.toFixed(6) : "0");
         } else {
-          swap.setMaxAmount(sellBalance);
+          swap.setMaxAmount(fromBalance);
         }
       } else {
-        swap.setSellAmount((bal * pct).toFixed(6).replace(/\.?0+$/, ""));
+        setter((bal * pct).toFixed(6).replace(/\.?0+$/, ""));
       }
     },
-    [sellBalance, swap.sellToken?.isNative, swap.setSellAmount, swap.setMaxAmount],
+    [fromBalance, isCrossChainMode, swap.sellToken?.isNative, swap.setSellAmount, swap.setMaxAmount, crossChainSwap.setFromAmount],
   );
 
   // ── Derived values ───────────────────────────────────────────────────────────
@@ -1240,12 +977,19 @@ export default function SwapScreen() {
         : COLORS.error;
 
   const isInsufficientBalance = useMemo(() => {
-    const amount = safeFloat(swap.sellAmount);
-    const balance = safeFloat(sellBalance);
+    const amount = safeFloat(fromAmount);
+    const balance = safeFloat(fromBalance);
     return amount > 0 && amount > balance;
-  }, [swap.sellAmount, sellBalance]);
+  }, [fromAmount, fromBalance]);
 
   const swapBtnLabel = useMemo(() => {
+    if (isCrossChainMode) {
+      if (!fromToken || !toToken) return "Select Assets";
+      if (safeFloat(fromAmount) === 0) return "Enter Amount";
+      if (isInsufficientBalance) return `Insufficient ${fromToken.symbol} Balance`;
+      if (crossChainSwap.error) return "Invalid Transfer";
+      return "Review Transfer";
+    }
     if (!swap.sellToken || !swap.buyToken) return "Select Tokens";
     if (safeFloat(swap.sellAmount) === 0) return "Enter Amount";
     if (isInsufficientBalance)
@@ -1253,6 +997,11 @@ export default function SwapScreen() {
     if (swap.error) return "Invalid Swap";
     return "Swap";
   }, [
+    isCrossChainMode,
+    fromToken,
+    toToken,
+    fromAmount,
+    crossChainSwap.error,
     swap.sellToken,
     swap.buyToken,
     swap.sellAmount,
@@ -1260,18 +1009,30 @@ export default function SwapScreen() {
     isInsufficientBalance,
   ]);
 
-  const sellUsdLabel = useMemo(
-    () => formatUsd(swap.sellAmount, sellUsdPrice),
-    [swap.sellAmount, sellUsdPrice],
+  const fromUsdLabel = useMemo(
+    () => (isCrossChainMode ? null : formatUsd(swap.sellAmount, sellUsdPrice)),
+    [isCrossChainMode, swap.sellAmount, sellUsdPrice],
   );
-  const buyUsdLabel = useMemo(
-    () => formatUsd(swap.buyAmountEstimate, buyUsdPrice),
-    [swap.buyAmountEstimate, buyUsdPrice],
+  const toUsdLabel = useMemo(
+    () => (isCrossChainMode ? null : formatUsd(swap.buyAmountEstimate, buyUsdPrice)),
+    [isCrossChainMode, swap.buyAmountEstimate, buyUsdPrice],
   );
 
-  const showPriceInfo = !!(swap.priceInfo || swap.isFetchingPrice);
-  const swapDisabled =
-    !swap.isReadyToSwap || swap.isFetchingQuote || isInsufficientBalance;
+  const toBalanceLabel = useMemo(() => {
+    if (isCrossChainMode) return null; // no receive-side balance shown for bridges (matches old CrossChainPanel)
+    if (!swap.buyToken) return null;
+    return `Bal  ${formatBalance(buyBalance)} ${swap.buyToken.symbol}`;
+  }, [isCrossChainMode, swap.buyToken, buyBalance]);
+
+  const showPriceInfo = !isCrossChainMode && !!(swap.priceInfo || swap.isFetchingPrice);
+
+  const actionDisabled = isCrossChainMode
+    ? (!crossChainSwap.quote || crossChainSwap.isFetchingQuote || !!crossChainSwap.error || isInsufficientBalance)
+    : (!swap.isReadyToSwap || swap.isFetchingQuote || isInsufficientBalance);
+
+  const actionBusy = isCrossChainMode ? crossChainSwap.isFetchingQuote : swap.isFetchingQuote;
+  const activeError = isCrossChainMode ? crossChainSwap.error : swap.error;
+  const clearError = isCrossChainMode ? () => crossChainSwap.setError(null) : () => swap.setError(null);
 
   return (
     <View style={styles.safeArea}>
@@ -1297,15 +1058,17 @@ export default function SwapScreen() {
                 </Text>
                 <Ionicons name="chevron-down" size={11} color={COLORS.textSecondary} />
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  { width: 34, height: 34, borderRadius: 8, justifyContent: "center", alignItems: "center" },
-                  showSettings ? { backgroundColor: COLORS.primary + "20" } : { backgroundColor: COLORS.surface },
-                ]}
-                onPress={() => setShowSettings((v) => !v)}
-              >
-                <Ionicons name={showSettings ? "settings" : "settings-outline"} size={17} color={showSettings ? COLORS.primary : COLORS.textSecondary} />
-              </TouchableOpacity>
+              {!isCrossChainMode && (
+                <TouchableOpacity
+                  style={[
+                    { width: 34, height: 34, borderRadius: 8, justifyContent: "center", alignItems: "center" },
+                    showSettings ? { backgroundColor: accentColor + "20" } : { backgroundColor: COLORS.surface },
+                  ]}
+                  onPress={() => setShowSettings((v) => !v)}
+                >
+                  <Ionicons name={showSettings ? "settings" : "settings-outline"} size={17} color={showSettings ? accentColor : COLORS.textSecondary} />
+                </TouchableOpacity>
+              )}
             </View>
           ),
         }]}
@@ -1316,10 +1079,12 @@ export default function SwapScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         removeClippedSubviews
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={COLORS.primary} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={accentColor} />}
       >
-        {/* Slippage */}
-        {showSettings && <SlippageSelector slippage={swap.slippage} onSelect={swap.setSlippage} theme={theme} />}
+        {/* Slippage — 0x-specific, same-chain only */}
+        {showSettings && !isCrossChainMode && (
+          <SlippageSelector slippage={swap.slippage} onSelect={swap.setSlippage} theme={accentTheme} />
+        )}
 
         {/* ── Network-changed banner ── */}
         {bannerName ? (
@@ -1327,126 +1092,71 @@ export default function SwapScreen() {
             style={{
               opacity: bannerAnim,
               flexDirection: "row", alignItems: "center", gap: 6,
-              backgroundColor: COLORS.primaryMuted,
+              backgroundColor: accentMuted,
               borderRadius: BORDER_RADIUS.md,
               paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm,
               marginBottom: SPACING.sm,
             }}
           >
             <ChainIcon chain={activeChain} size={15} />
-            <Text style={{ fontSize: FONTS.sizes.sm, fontWeight: "600", color: COLORS.primaryDark }}>
+            <Text style={{ fontSize: FONTS.sizes.sm, fontWeight: "600", color: accentColor }}>
               Switched to {bannerName}
             </Text>
           </Animated.View>
         ) : null}
 
-        {/* ── Swap widget ── */}
+        {/* ── Swap widget — one shared widget for both same-chain and
+              cross-chain: picking a different chain on either card
+              switches into the cross-chain (LI.FI) flow automatically. ── */}
         <View style={styles.swapWidget}>
+          <AssetCard
+            label="You Pay"
+            side="from"
+            chain={fromChain}
+            token={fromToken}
+            amount={fromAmount}
+            isLoadingToken={isFetchingFromToken}
+            usdLabel={fromUsdLabel}
+            onPressChip={() => setActivePicker("from")}
+            onPressAmount={() => setShowNumpad((v) => !v)}
+            showCursor={showNumpad}
+            cursorAnim={cursorAnim}
+            numpadOpen={showNumpad}
+            theme={accentTheme}
+          />
 
-          {/* Sell card — slim: just label + chip + amount */}
-          <View style={[
-            styles.inputCard,
-            { paddingBottom: 20 },
-            showNumpad && { borderWidth: 1, borderColor: COLORS.primary },
-          ]}>
-            <View style={styles.inputCardRow}>
-              <Text style={styles.inputLabel}>You Pay</Text>
-              <TouchableOpacity style={styles.tokenChip} onPress={() => setShowSellSelector(true)} activeOpacity={0.75}>
-                {swap.loadingTokens ? (
-                  <>
-                    <ActivityIndicator size={14} color={COLORS.primary} />
-                    <Text style={styles.tokenChipSelect}>Loading…</Text>
-                  </>
-                ) : swap.sellToken ? (
-                  <>
-                    <TokenLogo logoURI={swap.sellToken.logoURI} symbol={swap.sellToken.symbol} size={20} theme={theme} />
-                    <Text style={styles.tokenChipText}>{swap.sellToken.symbol}</Text>
-                  </>
-                ) : (
-                  <Text style={styles.tokenChipSelect}>Select token</Text>
-                )}
-                <Ionicons name="chevron-down" size={12} color={COLORS.textSecondary} />
-              </TouchableOpacity>
-            </View>
-
-            {/* Tapping the amount area opens the numpad */}
-            <TouchableOpacity
-              onPress={() => setShowNumpad(v => !v)}
-              activeOpacity={0.7}
-            >
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <Text style={styles.amountBig} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.35}>
-                  {swap.sellAmount || "0"}
-                </Text>
-                {showNumpad && (
-                  <Animated.Text style={[styles.amountBig, { opacity: cursorAnim, marginLeft: 2 }]}>
-                    |
-                  </Animated.Text>
-                )}
-              </View>
-              {sellUsdLabel ? <Text style={styles.amountUsd}>{sellUsdLabel}</Text> : null}
-            </TouchableOpacity>
-          </View>
-
-          {/* Bridge — sits at the join of both cards */}
           <View style={styles.bridgeRow}>
-            <TouchableOpacity style={styles.bridgeBtn} onPress={swap.flipTokens} activeOpacity={0.75}>
-              <Ionicons name="swap-vertical" size={32} color={COLORS.primary} />
+            <TouchableOpacity style={styles.bridgeBtn} onPress={handleFlip} activeOpacity={0.75}>
+              <Ionicons name="swap-vertical" size={32} color={accentColor} />
             </TouchableOpacity>
           </View>
 
-          {/* Buy card — slim: label + chip + estimate */}
-          <View style={[styles.inputCard, { paddingTop: 20 }]}>
-            <View style={styles.inputCardRow}>
-              <Text style={styles.inputLabel}>You Receive</Text>
-              <TouchableOpacity style={styles.tokenChip} onPress={() => setShowBuySelector(true)} activeOpacity={0.75}>
-                {swap.loadingTokens ? (
-                  <>
-                    <ActivityIndicator size={14} color={COLORS.primary} />
-                    <Text style={styles.tokenChipSelect}>Loading…</Text>
-                  </>
-                ) : swap.buyToken ? (
-                  <>
-                    <TokenLogo logoURI={swap.buyToken.logoURI} symbol={swap.buyToken.symbol} size={20} theme={theme} />
-                    <Text style={styles.tokenChipText}>{swap.buyToken.symbol}</Text>
-                  </>
-                ) : (
-                  <Text style={styles.tokenChipSelect}>Select token</Text>
-                )}
-                <Ionicons name="chevron-down" size={12} color={COLORS.textSecondary} />
-              </TouchableOpacity>
-            </View>
-
-            {swap.isFetchingPrice ? (
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 10 }}>
-                <ActivityIndicator size="small" color={COLORS.primary} />
-                <Text style={styles.fetchingText}>Fetching best price…</Text>
-              </View>
-            ) : (
-              <Text style={[styles.amountBig, { color: COLORS.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.35}>
-                {swap.buyAmountEstimate || "0"}
-              </Text>
-            )}
-            {buyUsdLabel ? <Text style={styles.amountUsd}>{buyUsdLabel}</Text> : null}
-            {swap.buyToken && (
-              <Text style={[styles.inputBalance, { marginTop: SPACING.xs }]}>
-                Bal  {formatBalance(buyBalance)} {swap.buyToken.symbol}
-              </Text>
-            )}
-          </View>
+          <AssetCard
+            label="You Receive"
+            side="to"
+            chain={toChain}
+            token={toToken}
+            amount={toAmountEstimate}
+            isEstimate
+            isFetchingEstimate={isFetchingToEstimate}
+            balanceLabel={toBalanceLabel}
+            usdLabel={toUsdLabel}
+            onPressChip={() => setActivePicker("to")}
+            theme={accentTheme}
+          />
         </View>
 
-        {/* Price info */}
+        {/* Price info — 0x-specific, same-chain only */}
         {showPriceInfo && (
-          <PriceInfo isFetchingPrice={swap.isFetchingPrice} exchangeRate={exchangeRate} priceImpact={priceImpact} slippage={swap.slippage} impactColor={impactColor} theme={theme} />
+          <PriceInfo isFetchingPrice={swap.isFetchingPrice} exchangeRate={exchangeRate} priceImpact={priceImpact} slippage={swap.slippage} impactColor={impactColor} theme={accentTheme} />
         )}
 
         {/* Error */}
-        {swap.error && (
+        {activeError && (
           <View style={styles.errorBanner}>
             <Ionicons name="alert-circle-outline" size={15} color={COLORS.error} />
-            <Text style={styles.errorText}>{swap.error}</Text>
-            <TouchableOpacity onPress={() => swap.setError(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text style={styles.errorText}>{activeError}</Text>
+            <TouchableOpacity onPress={clearError} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <Ionicons name="close" size={15} color={COLORS.error} />
             </TouchableOpacity>
           </View>
@@ -1455,9 +1165,9 @@ export default function SwapScreen() {
         {/* ── Balance + PCT quick-fill — sits above numpad ── */}
         <View style={styles.amountControls}>
           <Text style={styles.amountControlsBal}>
-            {swap.sellToken
-              ? `Bal  ${formatBalance(sellBalance)} ${swap.sellToken.symbol}`
-              : "Select a token first"}
+            {fromToken
+              ? `Bal  ${formatBalance(fromBalance)} ${fromToken.symbol}`
+              : "Select an asset first"}
           </Text>
           <View style={styles.pctRow}>
             {PCT_OPTIONS.map(({ label, value }) => (
@@ -1474,46 +1184,50 @@ export default function SwapScreen() {
             ))}
           </View>
         </View>
-        {swap.sellToken?.isNative && (
+        {(isCrossChainMode || fromToken?.isNative) && (
           <Text style={[styles.gasNote, { marginBottom: SPACING.xs }]}>
             ⛽ MAX reserves ~1% for gas
           </Text>
         )}
 
         {/* ── In-screen numpad — only visible when amount field is tapped ── */}
-        {showNumpad && <Numpad onPress={handleNumpadPress} theme={theme} />}
+        {showNumpad && <Numpad onPress={handleNumpadPress} theme={accentTheme} />}
 
-        {/* ── Swap action button ── */}
+        {/* ── Action button ── */}
         <TouchableOpacity
           style={[
             styles.swapActionBtn,
             isInsufficientBalance ? styles.swapActionBtnInsufficient
-              : swapDisabled ? styles.swapActionBtnDisabled : null,
+              : actionDisabled ? styles.swapActionBtnDisabled : null,
           ]}
-          onPress={handleSwapPress}
-          disabled={swapDisabled}
+          onPress={handleActionPress}
+          disabled={actionDisabled}
           activeOpacity={0.85}
         >
-          {swap.isFetchingQuote
-            ? <ActivityIndicator color="#fff" />
-            : <Text style={styles.swapActionBtnText}>{swapBtnLabel}</Text>}
+          {/* swapActionBtnInsufficient swaps the bg to COLORS.error, which is
+              theme-inverted (black in light mode, white in dark) rather than
+              part of the primary/lime family — COLORS.background gives the
+              right contrast in both cases there, COLORS.onPrimary otherwise. */}
+          {actionBusy
+            ? <ActivityIndicator color={isInsufficientBalance ? COLORS.background : COLORS.onPrimary} />
+            : <Text style={[styles.swapActionBtnText, isInsufficientBalance && { color: COLORS.background }]}>{swapBtnLabel}</Text>}
         </TouchableOpacity>
 
         {/* Powered by */}
         <View style={styles.poweredBy}>
           <Text style={styles.poweredByText}>Powered by </Text>
-          <Text style={styles.poweredByBrand}>0x Protocol</Text>
+          <Text style={styles.poweredByBrand}>{isCrossChainMode ? "LI.FI" : "0x Protocol"}</Text>
         </View>
 
-        {/* ── Trending tokens (CoinGecko, no card/border) ── */}
-        {trendingCoins.length > 0 && (
+        {/* ── Trending tokens (CoinGecko, no card/border) — same-chain only ── */}
+        {!isCrossChainMode && trendingCoins.length > 0 && (
           <View style={styles.trendingSection}>
             <View style={styles.trendingHeader}>
-              <Ionicons name="bar-chart-outline" size={14} color={COLORS.primary} />
+              <Ionicons name="bar-chart-outline" size={14} color={accentColor} />
               <Text style={styles.trendingTitle}>
                 Top Traded{activeChain?.name ? ` on ${activeChain.name}` : ""}
               </Text>
-              {loadingTrending && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginLeft: "auto" }} />}
+              {loadingTrending && <ActivityIndicator size="small" color={accentColor} style={{ marginLeft: "auto" }} />}
             </View>
 
             {trendingCoins.map((coin) => {
@@ -1532,7 +1246,7 @@ export default function SwapScreen() {
                   </View>
                   <View style={{ alignItems: "flex-end", marginRight: 8, gap: 2 }}>
                     <Text style={styles.trendingItemPrice}>{fmtPrice(coin.price)}</Text>
-                    <Text style={[styles.trendingItemChange, { color: isPos ? COLORS.primary : COLORS.error }]}>
+                    <Text style={[styles.trendingItemChange, { color: isPos ? accentColor : COLORS.error }]}>
                       {isPos ? "+" : ""}{coin.change24h?.toFixed(2)}%
                     </Text>
                   </View>
@@ -1545,12 +1259,35 @@ export default function SwapScreen() {
       </ScrollView>
 
       {/* Modals */}
-      {showSellSelector && (
-        <TokenSelectorModal visible onClose={() => setShowSellSelector(false)} onSelect={handleSellTokenSelect} tokens={swap.tokenList} selectedToken={swap.sellToken} excludeToken={swap.buyToken} title="You Pay" />
-      )}
-      {showBuySelector && (
-        <TokenSelectorModal visible onClose={() => setShowBuySelector(false)} onSelect={handleBuyTokenSelect} tokens={swap.tokenList} selectedToken={swap.buyToken} excludeToken={swap.sellToken} title="You Receive" />
-      )}
+      <AssetPickerModal
+        visible={activePicker === "from"}
+        onClose={() => setActivePicker(null)}
+        chains={pickerChains}
+        currentChain={fromChain}
+        activeChainId={activeChain?.id}
+        otherSideChainId={toChain?.id}
+        sameChainTokens={swap.tokenList}
+        loadingSameChainTokens={swap.loadingTokens}
+        selectedToken={fromToken}
+        excludeToken={toToken}
+        onCommit={handleFromAssetSelect}
+        title="You Pay"
+      />
+      <AssetPickerModal
+        visible={activePicker === "to"}
+        onClose={() => setActivePicker(null)}
+        chains={pickerChains}
+        currentChain={toChain}
+        activeChainId={activeChain?.id}
+        otherSideChainId={activeChain?.id}
+        sameChainTokens={swap.tokenList}
+        loadingSameChainTokens={swap.loadingTokens}
+        selectedToken={toToken}
+        excludeToken={fromToken}
+        onCommit={handleToAssetSelect}
+        title="You Receive"
+      />
+
       {currentQuote && (
         <SwapConfirmModal
           visible={showConfirm}
@@ -1564,6 +1301,16 @@ export default function SwapScreen() {
         />
       )}
       <ChainSwitcher visible={showChainSwitcher} onClose={() => setShowChainSwitcher(false)} />
+
+      <CrossChainConfirmModal
+        visible={showCrossChainConfirm}
+        onClose={() => setShowCrossChainConfirm(false)}
+        onSuccess={() => {
+          setShowCrossChainConfirm(false);
+          crossChainSwap.reset();
+        }}
+        crossChainSwap={crossChainSwap}
+      />
     </View>
   );
 }

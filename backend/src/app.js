@@ -15,6 +15,7 @@ import logger from './utils/logger.js';
 import db from './db/postgres.js';
 import { getRedis } from './db/redis.js';
 import { getMongoDB } from './db/mongodb.js';
+import { MINIAPP_SDK_SCRIPT } from './config/miniappSdkScript.js';
 
 export function createApp() {
   const app    = express();
@@ -202,6 +203,16 @@ export function createApp() {
         uptime:   Math.floor(process.uptime()),
         pid:      process.pid,
       });
+  });
+
+  // ─── Mini-app SDK — zero-build-step distribution ─────────────────────────────
+  // External developers `<script src=".../sdk/miniapp.js">` this directly —
+  // no npm publish, no bundler. See config/miniappSdkScript.js.
+  app.get('/sdk/miniapp.js', (_req, res) => {
+    res
+      .type('application/javascript; charset=utf-8')
+      .set('Cache-Control', 'public, max-age=300') // short TTL — this can change under active development
+      .send(MINIAPP_SDK_SCRIPT);
   });
 
   app.get('/', (_req, res) => {

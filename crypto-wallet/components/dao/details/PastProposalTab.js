@@ -50,10 +50,10 @@ const FilterChip = ({ label, active, onPress, count, theme }) => {
       onPress={onPress}
       activeOpacity={0.7}
     >
-      <Text style={[s.chipText, { color: active ? '#fff' : COLORS.textSecondary }]}>{label}</Text>
+      <Text style={[s.chipText, { color: active ? COLORS.onPrimary : COLORS.textSecondary }]}>{label}</Text>
       {count != null && (
-        <View style={[s.chipBadge, { backgroundColor: active ? 'rgba(255,255,255,0.28)' : COLORS.border }]}>
-          <Text style={[s.chipBadgeText, { color: active ? '#fff' : COLORS.text }]}>{count}</Text>
+        <View style={[s.chipBadge, { backgroundColor: active ? 'rgba(0,0,0,0.14)' : COLORS.border }]}>
+          <Text style={[s.chipBadgeText, { color: active ? COLORS.onPrimary : COLORS.text }]}>{count}</Text>
         </View>
       )}
     </TouchableOpacity>

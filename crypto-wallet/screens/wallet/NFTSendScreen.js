@@ -388,7 +388,7 @@ const NFTSendScreen = ({ navigation, route }) => {
               <View style={styles.nftMetadata}>
                 <View style={styles.nftChainBadge}>
                   {chain.icon && (
-                    <Image source={{ uri: chain.icon }} style={styles.nftChainIcon} />
+                    <Image source={typeof chain.icon === "string" ? { uri: chain.icon } : chain.icon} style={styles.nftChainIcon} />
                   )}
                   <Text style={styles.nftChainName}>{chain.name}</Text>
                 </View>

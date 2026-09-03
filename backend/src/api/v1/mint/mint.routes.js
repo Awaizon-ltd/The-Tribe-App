@@ -12,9 +12,12 @@ import logger from '../../../utils/logger.js';
 
 const router = express.Router();
 
+// TRIBE launches on Robinhood Chain, not Base — both slots are placeholder
+// zero addresses until the contracts are actually deployed there. Keep in
+// sync with crypto-wallet/constants/wsyn.js's WSYN_CONTRACTS.
 const WSYN_ADDRESSES = {
-  84532: '0x3c181eaaB64052c726194Da6797EA06DD15e8E6B',
-  8453:  process.env.WSYN_CONTRACT_ADDRESS_MAINNET ?? '0x0000000000000000000000000000000000000000',
+  46630: process.env.WSYN_CONTRACT_ADDRESS_TESTNET ?? '0x0000000000000000000000000000000000000000',
+  4663:  process.env.WSYN_CONTRACT_ADDRESS_MAINNET ?? '0x0000000000000000000000000000000000000000',
 };
 
 const MINT_FEE_WEI = '400000000000000';
@@ -23,7 +26,7 @@ router.post('/mint/voucher', requireFirebaseAuth, async (req, res) => {
   const { uid } = req;
   try {
     const requestedChainId = parseInt(
-      req.headers['x-chain-id'] ?? process.env.CHAIN_ID ?? '84532', 10,
+      req.headers['x-chain-id'] ?? process.env.CHAIN_ID ?? '46630', 10,
     );
     const contractAddress = WSYN_ADDRESSES[requestedChainId];
     if (!contractAddress || contractAddress === '0x0000000000000000000000000000000000000000') {

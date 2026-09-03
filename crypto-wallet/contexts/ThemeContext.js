@@ -12,8 +12,9 @@ export const ThemeProvider = ({ children }) => {
   const systemScheme = useColorScheme(); // 'dark' | 'light' | null
 
   // 'dark' | 'light' | 'system'
-  // Default to 'system' so new installs follow the device theme immediately
-  const [themeMode, setThemeModeState] = useState('system');
+  // Default to 'dark' (the brand default) for new installs — overridden by
+  // AsyncStorage below the moment a user has actually picked a preference.
+  const [themeMode, setThemeModeState] = useState('dark');
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {

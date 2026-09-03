@@ -9,7 +9,26 @@ import {
   base,
   baseSepolia,
 } from "viem/chains";
+import { defineChain } from "viem";
 import { getFactoryAddress } from "./FactoryAddress.js";
+
+// viem/chains doesn't ship a Robinhood Chain definition yet (as of viem
+// 2.43.3 in this project), so it's defined manually. Params verified
+// 2026-08-28 against robinhood.com support docs + Alchemy's network page.
+const robinhoodChain = defineChain({
+  id: 4663,
+  name: "Robinhood Chain",
+  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+  rpcUrls: {
+    default: { http: ["https://rpc.mainnet.chain.robinhood.com"] },
+  },
+  blockExplorers: {
+    default: {
+      name: "Robinhood Chain Explorer",
+      url: "https://robinhoodchain.blockscout.com",
+    },
+  },
+});
 
 export const SUPPORTED_CHAINS = {
   // ETHEREUM: {
@@ -104,6 +123,18 @@ export const SUPPORTED_CHAINS = {
     testnet: true,
     factoryAddress: getFactoryAddress(84532),
   },
+  ROBINHOOD: {
+    id: 4663,
+    name: "Robinhood Chain",
+    symbol: "ETH",
+    chain: robinhoodChain,
+    rpcUrl: "https://rpc.mainnet.chain.robinhood.com",
+    explorer: "https://robinhoodchain.blockscout.com",
+    icon: null,
+    testnet: false,
+    // null until DAOFactory.sol is deployed to Robinhood Chain — see FactoryAddress.js
+    factoryAddress: getFactoryAddress(4663),
+  },
   //  ABSTRACT: {
   //     id: 2741,
   //     name: 'Abstract',
@@ -116,7 +147,7 @@ export const SUPPORTED_CHAINS = {
   //   },
 };
 
-export const DEFAULT_CHAIN = SUPPORTED_CHAINS.BASE;
+export const DEFAULT_CHAIN = SUPPORTED_CHAINS.ROBINHOOD;
 
 export const getChainById = (chainId) =>
   Object.values(SUPPORTED_CHAINS).find((chain) => chain.id === chainId);

@@ -7,22 +7,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import Alert from '../../utils/Alert';
 import ReactionPicker, { REACTIONS } from '../feed/ReactionPicker';
+import { formatTimeAgo, getEntityTimestamp } from '../../utils/helpers';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function timeAgo(ts) {
-  if (!ts) return '';
-  const d = Date.now() - ts;
-  const s = Math.floor(d / 1000);
-  if (s < 60)  return 'Just now';
-  const m = Math.floor(s / 60);
-  if (m < 60)  return `${m}m`;
-  const h = Math.floor(m / 60);
-  if (h < 24)  return `${h}h`;
-  const days = Math.floor(h / 24);
-  if (days < 7) return `${days}d`;
-  return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
 
 function fmtCount(n) {
   if (!n) return null;
@@ -68,12 +55,12 @@ const POST_BASE_URL = 'https://sysfidao.com/post';
 
 const PostCard = ({
   post,
-  guild,
+  tribe,
   onReact,
   onComment,
   onDelete,
   canDelete,
-  onNavigateGuild,
+  onNavigateTribe,
   onPressContent,
 }) => {
   const { COLORS } = useTheme();
@@ -84,12 +71,10 @@ const PostCard = ({
   const topEmojis      = topReactionEmojis(post.reactionCounts);
   const myEmoji        = post.myReaction ? (REACTION_EMOJI[post.myReaction] || '🙂') : null;
 
-  const ts = post.createdAt instanceof Date
-    ? post.createdAt.getTime()
-    : typeof post.createdAt === 'number' ? post.createdAt : post.timestamp;
+  const ts = getEntityTimestamp(post);
 
-  const logoUrl = guild?.logo_url || guild?.logoUrl;
-  const guildName = guild?.name || 'Unknown Guild';
+  const logoUrl = tribe?.logo_url || tribe?.logoUrl;
+  const tribeName = tribe?.name || 'Unknown Tribe';
 
   const handleDelete = useCallback(() => {
     Alert.alert('Delete Post', 'Are you sure you want to delete this post?', [
@@ -99,12 +84,12 @@ const PostCard = ({
   }, [post.id, onDelete]);
 
   const handleShare = useCallback(async () => {
-    const guildId = guild?.id || guild?.guildId || post.guildId;
-    const url = `${POST_BASE_URL}/${guildId}/${post.id}`;
+    const tribeId = tribe?.id || tribe?.tribeId || post.tribeId;
+    const url = `${POST_BASE_URL}/${tribeId}/${post.id}`;
     try {
       await Share.share({ url, message: url });   // iOS uses url; Android uses message
     } catch {}
-  }, [guild, post.id, post.guildId]);
+  }, [tribe, post.id, post.tribeId]);
 
   return (
     <View style={{ backgroundColor: COLORS.background }}>
@@ -112,31 +97,31 @@ const PostCard = ({
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <TouchableOpacity
         style={s.header}
-        onPress={() => onNavigateGuild?.()}
-        activeOpacity={onNavigateGuild ? 0.7 : 1}
-        disabled={!onNavigateGuild}
+        onPress={() => onNavigateTribe?.()}
+        activeOpacity={onNavigateTribe ? 0.7 : 1}
+        disabled={!onNavigateTribe}
       >
         {logoUrl ? (
           <Image source={{ uri: logoUrl }} style={s.avatar} />
         ) : (
           <View style={[s.avatar, s.avatarFallback, { backgroundColor: COLORS.primary + '22' }]}>
             <Text style={[s.avatarLetter, { color: COLORS.primary }]}>
-              {guildName.charAt(0).toUpperCase()}
+              {tribeName.charAt(0).toUpperCase()}
             </Text>
           </View>
         )}
 
         <View style={s.headerText}>
           <View style={s.nameRow}>
-            <Text style={[s.guildName, { color: COLORS.text }]} numberOfLines={1}>
-              {guildName}
+            <Text style={[s.tribeName, { color: COLORS.text }]} numberOfLines={1}>
+              {tribeName}
             </Text>
-            {guild?.verified && (
+            {tribe?.verified && (
               <Ionicons name="checkmark-circle" size={14} color={COLORS.primary} style={{ marginLeft: 3 }} />
             )}
           </View>
           <Text style={[s.meta, { color: COLORS.textSecondary }]}>
-            {post.username} · {timeAgo(ts)}
+            {post.username} · {formatTimeAgo(ts)}
           </Text>
         </View>
 
@@ -254,7 +239,7 @@ const s = StyleSheet.create({
   avatarLetter:  { fontSize: 18, fontWeight: '700' },
   headerText:    { flex: 1 },
   nameRow:       { flexDirection: 'row', alignItems: 'center' },
-  guildName:     { fontSize: 15, fontWeight: '700', lineHeight: 20 },
+  tribeName:     { fontSize: 15, fontWeight: '700', lineHeight: 20 },
   meta:          { fontSize: 12, lineHeight: 17, marginTop: 1 },
 
   // Caption

@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getAuth, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWallet } from '../../contexts/WalletContext';
 import { useLoading } from '../../contexts/LoadingContext';
 import { useTheme } from '../../contexts/ThemeContext'; // Adjust path as needed
@@ -22,12 +23,14 @@ import Card from '../../components/common/Card';
 import { isValidMnemonic } from '../../utils/Wallet';
 import { useAuth } from '../../contexts/AuthContext';
 import Alert from '../../utils/Alert';
+import WalletBackupPasswordForm from '../../components/wallet/WalletBackupPasswordForm';
 
 const WalletSetupScreen = ({ navigation, route }) => {
   const theme = useTheme();
   const styles = createStyles(theme);
+  const insets = useSafeAreaInsets();
   const { createWallet, importWallet, loading } = useWallet();
-  const { tempCloudPassword, clearTempPassword, user } = useAuth();
+  const { tempCloudPassword, clearTempPassword, user, hasPasswordProvider } = useAuth();
   const { showLoading, updateLoading, hideLoading } = useLoading();
   
   // Get cloud password from navigation params (from Register/Login)
@@ -51,6 +54,12 @@ const WalletSetupScreen = ({ navigation, route }) => {
   const [reauthLoading, setReauthLoading] = useState(false);
   const [pendingAction, setPendingAction] = useState(null); // 'create' or 'import'
   const [showPassword, setShowPassword] = useState(false);
+
+  // Wallet Backup Password modal state — the Google-sign-in-has-no-password
+  // equivalent of the reauth modal above. See components/wallet/WalletBackupPasswordForm.js.
+  const [showBackupPasswordForm, setShowBackupPasswordForm] = useState(false);
+  const [backupPasswordLoading, setBackupPasswordLoading] = useState(false);
+  const [backupPasswordError, setBackupPasswordError] = useState('');
 
   const validateForm = () => {
     const newErrors = {};
@@ -239,6 +248,14 @@ const WalletSetupScreen = ({ navigation, route }) => {
     if (!validateForm()) return;
 
     if (!cloudPassword) {
+      if (!hasPasswordProvider) {
+        // Google-only account — there's no Firebase password to reauth
+        // with. Ask the user to set a dedicated Wallet Backup Password
+        // instead (see WalletBackupPasswordForm).
+        setPendingAction('create');
+        setShowBackupPasswordForm(true);
+        return;
+      }
       // No cloud password available, show reauthentication modal
       setPendingAction('create');
       setShowReauthModal(true);
@@ -252,6 +269,11 @@ const WalletSetupScreen = ({ navigation, route }) => {
     if (!validateForm()) return;
 
     if (!cloudPassword) {
+      if (!hasPasswordProvider) {
+        setPendingAction('import');
+        setShowBackupPasswordForm(true);
+        return;
+      }
       // No cloud password available, show reauthentication modal
       setPendingAction('import');
       setShowReauthModal(true);
@@ -259,6 +281,27 @@ const WalletSetupScreen = ({ navigation, route }) => {
     }
 
     await proceedWithWalletImport(cloudPassword);
+  };
+
+  const handleBackupPasswordSubmit = async (password) => {
+    setBackupPasswordLoading(true);
+    setBackupPasswordError('');
+    try {
+      if (pendingAction === 'create') {
+        await proceedWithWalletCreation(password);
+      } else if (pendingAction === 'import') {
+        await proceedWithWalletImport(password);
+      }
+      setShowBackupPasswordForm(false);
+      setPendingAction(null);
+    } catch (error) {
+      // proceedWithWalletCreation/Import already show an Alert on failure —
+      // keep the form open so the user can retry without re-entering the
+      // rest of the wizard.
+      setBackupPasswordError(error?.message || 'Failed to set up wallet. Please try again.');
+    } finally {
+      setBackupPasswordLoading(false);
+    }
   };
 
   const handleCopyMnemonic = () => {
@@ -394,7 +437,7 @@ const WalletSetupScreen = ({ navigation, route }) => {
   // Success screen after wallet creation
   if (generatedMnemonic) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, { paddingTop: insets.top }]}>
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.header}>
             <View style={styles.iconContainer}>
@@ -457,7 +500,7 @@ const WalletSetupScreen = ({ navigation, route }) => {
   // Mode selection screen
   if (!mode) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.content}>
           <View style={styles.header}>
             <View style={styles.iconContainer}>
@@ -652,6 +695,20 @@ const WalletSetupScreen = ({ navigation, route }) => {
 
       {/* Reauthentication Modal */}
       {ReauthModal}
+
+      {/* Wallet Backup Password Modal — Google-only accounts (no Firebase password) */}
+      <WalletBackupPasswordForm
+        visible={showBackupPasswordForm}
+        mode="create"
+        loading={backupPasswordLoading}
+        error={backupPasswordError}
+        onSubmit={handleBackupPasswordSubmit}
+        onCancel={() => {
+          setShowBackupPasswordForm(false);
+          setPendingAction(null);
+          setBackupPasswordError('');
+        }}
+      />
     </KeyboardAvoidingView>
   );
 };

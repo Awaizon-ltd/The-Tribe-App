@@ -9,7 +9,7 @@ import { withCache, nftCache } from "./NftsCache";
 // CHAIN SUPPORT CONFIGURATION
 // ============================================================================
 
-// Both Base mainnet (8453) and Base Sepolia (84532) are fully supported by Alchemy NFT APIs.
+// Base mainnet (8453) is fully supported by Alchemy NFT APIs.
 
 
 // ============================================================================

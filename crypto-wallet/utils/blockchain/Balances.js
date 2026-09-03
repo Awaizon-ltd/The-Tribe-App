@@ -25,8 +25,8 @@ const LOG_SCAN_BLOCKS = 50_000;
 const MAX_TOKENS_TO_RESOLVE = 20;
 
 // Known tokens per chain for guaranteed coverage regardless of Transfer log history.
-// Base mainnet and Base Sepolia both have full eth_getLogs support so this is
-// a safety net only — add addresses here if a token is known to be missing from logs.
+// Base mainnet has full eth_getLogs support so this is a safety net only —
+// add addresses here if a token is known to be missing from logs.
 const KNOWN_TOKENS = {};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

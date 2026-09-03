@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Vibration } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWallet } from '../../contexts/WalletContext';
 import { useLoading } from '../../contexts/LoadingContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -9,6 +10,7 @@ const PasscodeUnlockScreen = ({ navigation }) => {
   const { authenticateWithPasscode, wallet } = useWallet();
   const { showLoading, updateLoading, hideLoading } = useLoading();
   const { COLORS, SPACING, FONTS } = useTheme();
+  const insets = useSafeAreaInsets();
 
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -41,7 +43,7 @@ const PasscodeUnlockScreen = ({ navigation }) => {
   const s = makeStyles(COLORS, SPACING, FONTS);
 
   return (
-    <View style={s.container}>
+    <View style={[s.container, { paddingTop: insets.top + SPACING.lg }]}>
       <View style={s.center}>
         <PasscodeKeypad
           onComplete={handleComplete}

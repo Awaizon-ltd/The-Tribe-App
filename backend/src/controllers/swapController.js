@@ -71,6 +71,18 @@ const NATIVE_TOKENS = {
     logoURI:
       "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png",
   },
+  // 0x confirmed same-chain Swap API support for Robinhood Chain at launch
+  // (0x.org/post/robinhood-chain, 2026-07) — native gas token is ETH.
+  4663: {
+    name: "Ether",
+    symbol: "ETH",
+    address: NATIVE_TOKEN_ADDRESS,
+    decimals: 18,
+    chainId: 4663,
+    isNative: true,
+    logoURI:
+      "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png",
+  },
   43114: {
     name: "Avalanche",
     symbol: "AVAX",
@@ -185,7 +197,14 @@ const MANAGED_WRAPPED_ADDRESSES = new Set(
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const getTokenList = (chainId) => {
-  const erc20s = (TOKEN_LISTS[chainId] ?? TOKEN_LISTS[1]).filter(
+  // Was `TOKEN_LISTS[chainId] ?? TOKEN_LISTS[1]` — silently handed out
+  // Ethereum-mainnet token addresses mislabeled as belonging to whatever
+  // chain was actually requested (e.g. Robinhood Chain, chainId 4663, which
+  // has no curated list yet). Wrong contract addresses in a swap flow risk
+  // real fund loss, so an unlisted chain now gets an empty ERC20 list —
+  // still swappable via its native token, and "Import Token" covers
+  // anything else by address — instead of a wrong one.
+  const erc20s = (TOKEN_LISTS[chainId] ?? []).filter(
     (t) => !MANAGED_WRAPPED_ADDRESSES.has(t.address.toLowerCase()),
   );
   const native = NATIVE_TOKENS[chainId];

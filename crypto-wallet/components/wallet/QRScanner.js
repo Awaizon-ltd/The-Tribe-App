@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
   permissionButtonText: {
     fontSize: FONTS.sizes.md,
     fontWeight: 'bold',
-    color: COLORS.background,
+    color: COLORS.onPrimary, // permissionButton's bg is COLORS.primary
     textAlign: 'center',
   },
   closeButton: {

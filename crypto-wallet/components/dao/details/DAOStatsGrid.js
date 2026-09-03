@@ -33,7 +33,7 @@ const STATS = (totalProposals, activeProposals, members, treasuryBalance, tokenS
     label: 'Treasury',
     value: formatNumber(treasuryBalance || '0'),
     sub: tokenSymbol || '',
-    accent: '#8B5CF6',
+    accent: '#D6FF00',
   },
 ];
 

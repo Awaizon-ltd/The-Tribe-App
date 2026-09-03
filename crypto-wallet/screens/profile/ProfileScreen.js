@@ -1,16 +1,16 @@
 // screens/profile/ProfileScreen.js
 //
 // Redesigned around social-profile conventions: stats row → hero balance →
-// Posts / Guilds / About tabs, instead of a stack of settings sections.
+// Posts / Tribes / About tabs, instead of a stack of settings sections.
 //
 // Data notes:
-//   - Guilds count/list: real, from api.getMyGuilds() (already exists).
+//   - Tribes count/list: real, from api.getMyTribes() (already exists).
 //   - Posts tab: there's no dedicated "my posts" endpoint yet, so this
 //     filters api.getFeed() client-side by author. That only sees posts
-//     from guilds you're in and whatever page(s) the feed returns — it's a
+//     from tribes you're in and whatever page(s) the feed returns — it's a
 //     reasonable stand-in, not a complete history. TODO: add a real
 //     getMyPosts(userId) endpoint and swap loadPosts() over to it.
-//   - Field names (post.authorId / post.username / guild.memberCount etc.)
+//   - Field names (post.authorId / post.username / tribe.memberCount etc.)
 //     are my best guess from the existing API shape — check these against
 //     your actual response payloads and adjust the accessors marked below.
 //
@@ -39,7 +39,7 @@ import { useUserData } from "../../contexts/UserDataContext";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useWallet } from "../../contexts/WalletContext";
 import { auth } from "../../services/Firebase";
-import api from "../../services/GuildApiService";
+import api from "../../services/TribeApiService";
 import Alert from "../../utils/Alert";
 import MembershipCardModal from "../../components/wallet/MembershipCardModal";
 
@@ -90,7 +90,7 @@ const Avatar = ({ uri, displayName, size, onPress, COLORS }) => {
           { backgroundColor: COLORS.primary, borderColor: COLORS.background },
         ]}
       >
-        <Ionicons name="camera" size={12} color="#fff" />
+        <Ionicons name="camera" size={12} color={COLORS.onPrimary} />
       </View>
     </TouchableOpacity>
   );
@@ -283,7 +283,7 @@ const ab = StyleSheet.create({
 
 const TABS = [
   { key: "posts", label: "Posts", icon: "grid-outline" },
-  { key: "guilds", label: "Guilds", icon: "people-outline" },
+  { key: "tribes", label: "Tribes", icon: "people-outline" },
   { key: "about", label: "About", icon: "information-circle-outline" },
 ];
 
@@ -347,8 +347,8 @@ const PostCard = ({ post, COLORS }) => (
     ]}
   >
     <View style={pc.header}>
-      <Text style={[pc.guildName, { color: COLORS.primary }]} numberOfLines={1}>
-        {post.guildName || "Guild"}
+      <Text style={[pc.tribeName, { color: COLORS.primary }]} numberOfLines={1}>
+        {post.tribeName || "Tribe"}
       </Text>
       <Text style={[pc.time, { color: COLORS.textTertiary }]}>
         {post.createdAt
@@ -398,7 +398,7 @@ const pc = StyleSheet.create({
     alignItems: "center",
     marginBottom: 6,
   },
-  guildName: { fontSize: 12, fontWeight: "700" },
+  tribeName: { fontSize: 12, fontWeight: "700" },
   time: { fontSize: 11 },
   body: { fontSize: 14, lineHeight: 20, marginBottom: 10 },
   footer: { flexDirection: "row", gap: 16 },
@@ -406,9 +406,9 @@ const pc = StyleSheet.create({
   metaText: { fontSize: 12, fontWeight: "600" },
 });
 
-// ─── Guild row (Guilds tab) ───────────────────────────────────────────────────
+// ─── Tribe row (Tribes tab) ───────────────────────────────────────────────────
 
-const GuildRow = ({ guild, onPress, COLORS }) => (
+const TribeRow = ({ tribe, onPress, COLORS }) => (
   <TouchableOpacity style={gc.row} onPress={onPress} activeOpacity={0.6}>
     <View
       style={[
@@ -416,21 +416,21 @@ const GuildRow = ({ guild, onPress, COLORS }) => (
         { backgroundColor: COLORS.background, borderColor: COLORS.border },
       ]}
     >
-      {guild.icon ? (
-        <Image source={{ uri: guild.icon }} style={gc.icon} />
+      {tribe.icon ? (
+        <Image source={{ uri: tribe.icon }} style={gc.icon} />
       ) : (
         <Text style={[gc.iconFallback, { color: COLORS.primary }]}>
-          {guild.name?.charAt(0)}
+          {tribe.name?.charAt(0)}
         </Text>
       )}
     </View>
     <View style={{ flex: 1 }}>
       <Text style={[gc.name, { color: COLORS.text }]} numberOfLines={1}>
-        {guild.name}
+        {tribe.name}
       </Text>
-      {typeof guild.memberCount === "number" && (
+      {typeof tribe.memberCount === "number" && (
         <Text style={[gc.sub, { color: COLORS.textTertiary }]}>
-          {guild.memberCount.toLocaleString()} members
+          {tribe.memberCount.toLocaleString()} members
         </Text>
       )}
     </View>
@@ -568,26 +568,26 @@ const ProfileScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
 
   const [activeTab, setActiveTab] = useState("posts");
-  const [guilds, setGuilds] = useState([]);
-  const [guildsLoading, setGuildsLoading] = useState(true);
+  const [tribes, setTribes] = useState([]);
+  const [tribesLoading, setTribesLoading] = useState(true);
   const [feed, setFeed] = useState([]);
   const [feedLoading, setFeedLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showMembershipCard, setShowMembershipCard] = useState(false);
 
-  const loadGuilds = useCallback(async () => {
+  const loadTribes = useCallback(async () => {
     try {
-      const list = await api.getMyGuilds();
-      setGuilds(list || []);
+      const list = await api.getMyTribes();
+      setTribes(list || []);
     } catch {
-      setGuilds([]);
+      setTribes([]);
     }
   }, []);
 
   const loadPosts = useCallback(async () => {
     try {
       // TODO: replace with a dedicated getMyPosts(userId) endpoint — this
-      // filters the general feed client-side, which only covers guilds
+      // filters the general feed client-side, which only covers tribes
       // you're a member of and whatever page(s) the feed API returns.
       const items = await api.getFeed(1, 50);
       setFeed(items || []);
@@ -598,22 +598,22 @@ const ProfileScreen = ({ navigation }) => {
 
   useEffect(() => {
     let mounted = true;
-    Promise.all([loadGuilds(), loadPosts()]).finally(() => {
+    Promise.all([loadTribes(), loadPosts()]).finally(() => {
       if (mounted) {
-        setGuildsLoading(false);
+        setTribesLoading(false);
         setFeedLoading(false);
       }
     });
     return () => {
       mounted = false;
     };
-  }, [loadGuilds, loadPosts]);
+  }, [loadTribes, loadPosts]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([loadGuilds(), loadPosts()]);
+    await Promise.all([loadTribes(), loadPosts()]);
     setRefreshing(false);
-  }, [loadGuilds, loadPosts]);
+  }, [loadTribes, loadPosts]);
 
   const myPosts = useMemo(() => {
     if (!userData) return [];
@@ -805,9 +805,9 @@ const ProfileScreen = ({ navigation }) => {
         {/* ── Stats ── */}
         <View style={st.row}>
           <StatBlock
-            value={guildsLoading ? "—" : guilds.length}
-            label="Guilds"
-            onPress={() => setActiveTab("guilds")}
+            value={tribesLoading ? "—" : tribes.length}
+            label="Tribes"
+            onPress={() => setActiveTab("tribes")}
             COLORS={COLORS}
           />
           <StatBlock
@@ -848,7 +848,7 @@ const ProfileScreen = ({ navigation }) => {
                   No posts yet
                 </Text>
                 <Text style={[s.emptyBody, { color: COLORS.textTertiary }]}>
-                  Join a guild and share something to see it here.
+                  Join a tribe and share something to see it here.
                 </Text>
               </View>
             ) : (
@@ -857,13 +857,13 @@ const ProfileScreen = ({ navigation }) => {
               ))
             ))}
 
-          {activeTab === "guilds" &&
-            (guildsLoading ? (
+          {activeTab === "tribes" &&
+            (tribesLoading ? (
               <ActivityIndicator
                 color={COLORS.primary}
                 style={{ marginTop: 30 }}
               />
-            ) : guilds.length === 0 ? (
+            ) : tribes.length === 0 ? (
               <View style={s.emptyState}>
                 <Ionicons
                   name="people-outline"
@@ -871,20 +871,20 @@ const ProfileScreen = ({ navigation }) => {
                   color={COLORS.textTertiary}
                 />
                 <Text style={[s.emptyTitle, { color: COLORS.text }]}>
-                  No guilds yet
+                  No tribes yet
                 </Text>
                 <Text style={[s.emptyBody, { color: COLORS.textTertiary }]}>
                   Communities you join will show up here.
                 </Text>
               </View>
             ) : (
-              guilds.map((guild) => (
-                <GuildRow
-                  key={guild.id}
-                  guild={guild}
-                  // TODO: confirm the guild-detail route name in your navigator.
+              tribes.map((tribe) => (
+                <TribeRow
+                  key={tribe.id}
+                  tribe={tribe}
+                  // TODO: confirm the tribe-detail route name in your navigator.
                   onPress={() =>
-                    navigation.navigate("GuildDetail", { guildId: guild.id })
+                    navigation.navigate("TribeDetail", { tribeId: tribe.id })
                   }
                   COLORS={COLORS}
                 />

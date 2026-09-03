@@ -9,6 +9,7 @@ import {
   Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../contexts/ThemeContext'; // Adjust path as needed
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
@@ -20,6 +21,7 @@ import Alert from '../../utils/Alert';
 const NFTDetailScreen = ({ route, navigation }) => {
   const theme = useTheme();
   const styles = createStyles(theme);
+  const insets = useSafeAreaInsets();
   const { nft } = route.params;
 
   const getImageUrl = (nft) => {
@@ -80,7 +82,7 @@ const NFTDetailScreen = ({ route, navigation }) => {
     <View style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Header */}
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
           <Pressable
             onPress={() => navigation.goBack()}
             style={styles.backButton}
@@ -119,7 +121,7 @@ const NFTDetailScreen = ({ route, navigation }) => {
             <Text style={styles.collection}>{nft.contract?.name}</Text>
             {chain && (
               <View style={styles.chainBadge}>
-                <Image source={{ uri: chain.icon }} style={styles.chainIcon} />
+                <Image source={typeof chain.icon === "string" ? { uri: chain.icon } : chain.icon} style={styles.chainIcon} />
                 <Text style={styles.chainName}>{chain.name}</Text>
               </View>
             )}

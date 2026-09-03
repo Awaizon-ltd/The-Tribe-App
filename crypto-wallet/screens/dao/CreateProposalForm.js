@@ -722,8 +722,8 @@ export function CreateProposalForm({ route, navigation }) {
             disabled={!isFormValid}
             activeOpacity={0.85}
           >
-            <Ionicons name="checkmark-circle" size={18} color="#fff" />
-            <Text style={s.submitText}>Create Proposal</Text>
+            <Ionicons name="checkmark-circle" size={18} color={COLORS.onPrimary} />
+            <Text style={[s.submitText, { color: COLORS.onPrimary }]}>Create Proposal</Text>
           </TouchableOpacity>
         </View>
 

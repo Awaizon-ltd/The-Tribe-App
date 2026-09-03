@@ -5,21 +5,9 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme }    from '../../contexts/ThemeContext';
 import ReactionPicker  from './ReactionPicker';
+import { formatTimeAgo, getEntityTimestamp } from '../../utils/helpers';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function timeAgo(ts) {
-  const d = Date.now() - ts;
-  const s = Math.floor(d / 1000);
-  if (s < 60)  return 'Just now';
-  const m = Math.floor(s / 60);
-  if (m < 60)  return `${m}m`;
-  const h = Math.floor(m / 60);
-  if (h < 24)  return `${h}h`;
-  const days = Math.floor(h / 24);
-  if (days < 7) return `${days}d`;
-  return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
 
 function fmtCount(n) {
   if (!n) return null;
@@ -64,7 +52,7 @@ const FeedPostCard = ({
   onReact,
   onComment,
   onRepost,
-  onNavigateGuild,
+  onNavigateTribe,
   canDelete,
   onDelete,
   onPressContent,   // navigate to PostDetail when description/image is tapped
@@ -79,14 +67,14 @@ const FeedPostCard = ({
   const myEmoji        = post.myReaction ? (REACTION_EMOJI[post.myReaction] || '🙂') : null;
 
   const handleShare = useCallback(async () => {
-    const url = `https://sysfidao.com/post/${post.guildId}/${post.id}`;
+    const url = `https://sysfidao.com/post/${post.tribeId}/${post.id}`;
     try { await Share.share({ url, message: url }); }
     catch {}
-  }, [post.guildId, post.id]);
+  }, [post.tribeId, post.id]);
 
   const handleNavigate = useCallback(() => {
-    onNavigateGuild?.(post.guildId);
-  }, [post.guildId, onNavigateGuild]);
+    onNavigateTribe?.(post.tribeId);
+  }, [post.tribeId, onNavigateTribe]);
 
   return (
     <View style={{ backgroundColor: COLORS.background }}>
@@ -99,24 +87,24 @@ const FeedPostCard = ({
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <View style={s.header}>
         <TouchableOpacity style={s.authorRow} onPress={handleNavigate} activeOpacity={0.7}>
-          {post.guildLogoUrl ? (
-            <Image source={{ uri: post.guildLogoUrl }} style={s.avatar} />
+          {post.tribeLogoUrl ? (
+            <Image source={{ uri: post.tribeLogoUrl }} style={s.avatar} />
           ) : (
             <View style={[s.avatar, s.avatarFallback, { backgroundColor: COLORS.primary + '22' }]}>
               <Text style={[s.avatarLetter, { color: COLORS.primary }]}>
-                {post.guildName?.charAt(0)?.toUpperCase() || 'G'}
+                {post.tribeName?.charAt(0)?.toUpperCase() || 'G'}
               </Text>
             </View>
           )}
           <View style={s.authorText}>
-            <Text style={[s.guildName, { color: COLORS.text }]} numberOfLines={1}>
-              {post.guildName}
+            <Text style={[s.tribeName, { color: COLORS.text }]} numberOfLines={1}>
+              {post.tribeName}
             </Text>
             <Text style={[s.meta, { color: COLORS.textSecondary }]} numberOfLines={1}>
               {post.isRepost && post.originalAuthor
                 ? `Originally by ${post.originalAuthor} · `
                 : ''
-              }{post.username} · {timeAgo(post.timestamp)}
+              }{post.username} · {formatTimeAgo(getEntityTimestamp(post))}
             </Text>
           </View>
         </TouchableOpacity>
@@ -261,7 +249,7 @@ const s = StyleSheet.create({
   avatarFallback: { justifyContent: 'center', alignItems: 'center' },
   avatarLetter: { fontSize: 18, fontWeight: '700' },
   authorText:   { flex: 1 },
-  guildName:    { fontSize: 15, fontWeight: '700', lineHeight: 20 },
+  tribeName:    { fontSize: 15, fontWeight: '700', lineHeight: 20 },
   meta:         { fontSize: 12, lineHeight: 17, marginTop: 1 },
   headerRight:  { flexDirection: 'row', alignItems: 'center', gap: 10 },
   trendPill:    { width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },

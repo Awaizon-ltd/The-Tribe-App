@@ -543,7 +543,7 @@ export function ProposalDetailScreen({ route, navigation }) {
           {/* Can Finalize */}
           {canFinalize && (
             <TouchableOpacity style={styles.finalizeButton} onPress={handleFinalize}>
-              <Ionicons name="flag" size={20} color={COLORS.background} />
+              <Ionicons name="flag" size={20} color={COLORS.onPrimary} />
               <Text style={styles.finalizeButtonText}>Finalize Proposal</Text>
             </TouchableOpacity>
           )}
@@ -999,7 +999,7 @@ const styles = StyleSheet.create({
   finalizeButtonText: {
     fontSize: FONTS.sizes.md,
     fontWeight: 'bold',
-    color: COLORS.background,
+    color: COLORS.onPrimary,
   },
   executeButton: {
     flexDirection: 'row',

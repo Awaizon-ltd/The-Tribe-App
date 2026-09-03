@@ -87,7 +87,7 @@ export const getProposalStatusColor = (status) => {
     [ProposalStatus.PASSED]: '#10B981', // Green
     [ProposalStatus.FAILED]: '#EF4444', // Red
     [ProposalStatus.QUEUED]: '#F59E0B', // Orange
-    [ProposalStatus.EXECUTED]: '#8B5CF6', // Purple
+    [ProposalStatus.EXECUTED]: '#D6FF00', // Robinhood Chain lime
     [ProposalStatus.CANCELLED]: '#6B7280', // Gray
   };
   return colors[status] || '#6B7280';

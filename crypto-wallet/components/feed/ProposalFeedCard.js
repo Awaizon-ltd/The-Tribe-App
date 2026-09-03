@@ -16,7 +16,7 @@ const STATUS_META = {
   1: { label: 'Passed',    color: '#3B82F6', icon: 'checkmark-circle' },
   2: { label: 'Failed',    color: '#EF4444', icon: 'close-circle' },
   3: { label: 'Queued',    color: '#F59E0B', icon: 'time' },
-  4: { label: 'Executed',  color: '#8B5CF6', icon: 'rocket' },
+  4: { label: 'Executed',  color: '#D6FF00', icon: 'rocket' },
   5: { label: 'Cancelled', color: '#6B7280', icon: 'ban' },
 };
 
@@ -66,8 +66,8 @@ const ProposalFeedCard = ({
   proposal,
   daoName,
   daoAddress,
-  guildName,
-  guildLogoUrl,
+  tribeName,
+  tribeLogoUrl,
   chainId,
   onVote,    // (proposal, daoAddress) => void
   onPress,   // (proposal, daoAddress) => void
@@ -88,10 +88,10 @@ const ProposalFeedCard = ({
       onPress={() => onPress?.(proposal, daoAddress)}
       activeOpacity={0.85}
     >
-      {/* Header: guild/DAO info */}
+      {/* Header: tribe/DAO info */}
       <View style={s.header}>
-        {guildLogoUrl ? (
-          <Image source={{ uri: guildLogoUrl }} style={s.logo} />
+        {tribeLogoUrl ? (
+          <Image source={{ uri: tribeLogoUrl }} style={s.logo} />
         ) : (
           <View style={[s.logo, s.logoFallback, { backgroundColor: COLORS.primary + '20' }]}>
             <Ionicons name="shield-half-outline" size={20} color={COLORS.primary} />
@@ -101,8 +101,8 @@ const ProposalFeedCard = ({
           <Text style={[s.daoName, { color: COLORS.text }]} numberOfLines={1}>
             {daoName || 'DAO'}
           </Text>
-          <Text style={[s.guildLabel, { color: COLORS.textSecondary }]}>
-            {guildName} · Governance
+          <Text style={[s.tribeLabel, { color: COLORS.textSecondary }]}>
+            {tribeName} · Governance
           </Text>
         </View>
         <View style={[s.statusChip, { backgroundColor: meta.color + '20' }]}>
@@ -159,7 +159,7 @@ const s = StyleSheet.create({
   logoFallback: { justifyContent: 'center', alignItems: 'center' },
   headerText:  { flex: 1 },
   daoName:     { fontSize: 14, fontWeight: '700' },
-  guildLabel:  { fontSize: 12 },
+  tribeLabel:  { fontSize: 12 },
   statusChip:  { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
   statusText:  { fontSize: 11, fontWeight: '600' },
 

@@ -7,6 +7,7 @@ import {
   Vibration,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getBiometricStatus, setupBiometric } from '../../utils/Biometric';
 import { useTheme } from '../../contexts/ThemeContext';
 import Alert from '../../utils/Alert';
@@ -20,6 +21,7 @@ const SetupBiometricScreen = ({ navigation }) => {
   const [isLoading, setIsLoading] = useState(false);
 
   const { COLORS, SPACING, FONTS } = useTheme();
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     getBiometricStatus().then(s => setBiometricType(s.type));
@@ -67,7 +69,7 @@ const SetupBiometricScreen = ({ navigation }) => {
   // ── Step 2: Biometric verification ──────────────────────────────────────────
   if (step === 2) {
     return (
-      <View style={s.container}>
+      <View style={[s.container, { paddingTop: insets.top + SPACING.lg }]}>
         <TouchableOpacity
           style={s.backBtn}
           onPress={() => { setStep(1); setPasscode(''); setError(''); }}

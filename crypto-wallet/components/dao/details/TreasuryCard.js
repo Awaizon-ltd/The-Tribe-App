@@ -31,7 +31,7 @@ export const TreasuryCard = ({ getTreasuryBalance, tokenSymbol }) => {
       <Text style={[s.sectionTitle, { color: COLORS.text }]}>DAO Treasury</Text>
 
       <LinearGradient
-        colors={['#7C3AED', '#5B21B6']}
+        colors={['#1A2100', '#0A0A0A']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={[s.card, SHADOWS.medium]}
@@ -42,7 +42,7 @@ export const TreasuryCard = ({ getTreasuryBalance, tokenSymbol }) => {
 
         <View style={s.content}>
           <View style={s.iconWrap}>
-            <Ionicons name="wallet" size={26} color="#fff" />
+            <Ionicons name="wallet" size={26} color="#D6FF00" />
           </View>
 
           <View style={s.textBlock}>
@@ -87,13 +87,13 @@ const s = StyleSheet.create({
   decoA: {
     position: 'absolute',
     width: 140, height: 140, borderRadius: 70,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(214,255,0,0.10)',
     top: -50, right: -40,
   },
   decoB: {
     position: 'absolute',
     width: 90, height: 90, borderRadius: 45,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: 'rgba(214,255,0,0.07)',
     bottom: -30, right: 60,
   },
   content: {
@@ -103,7 +103,7 @@ const s = StyleSheet.create({
   },
   iconWrap: {
     width: 52, height: 52, borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: 'rgba(214,255,0,0.16)',
     justifyContent: 'center', alignItems: 'center',
   },
   textBlock: {

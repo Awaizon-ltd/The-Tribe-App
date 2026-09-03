@@ -370,7 +370,7 @@ const ReceiveScreen = ({ navigation }) => {
               disabled={!requestToken}
               activeOpacity={0.85}
             >
-              <Ionicons name="link-outline" size={17} color="#fff" style={{ marginRight: 8 }} />
+              <Ionicons name="link-outline" size={17} color={COLORS.onPrimary} style={{ marginRight: 8 }} />
               <Text style={S.ctaBtnText}>
                 {requestLink ? 'Regenerate Link' : 'Generate Request Link'}
               </Text>
@@ -603,7 +603,7 @@ const createStyles = (COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS) =>
       paddingVertical: SPACING.md + 2, ...SHADOWS.large,
     },
     ctaBtnDisabled: { opacity: 0.4 },
-    ctaBtnText: { fontSize: FONTS.sizes.lg, fontWeight: '800', color: '#fff', letterSpacing: 0.2 },
+    ctaBtnText: { fontSize: FONTS.sizes.lg, fontWeight: '800', color: COLORS.onPrimary, letterSpacing: 0.2 },
     helperText: { fontSize: FONTS.sizes.xs, color: COLORS.textTertiary, textAlign: 'center' },
 
     // Token picker modal

@@ -315,14 +315,16 @@ const RegisterScreen = ({ navigation }) => {
           fontSize: FONTS.sizes.xs,
           fontWeight: "800",
           letterSpacing: 1.5,
-          color: `${COLORS.background}99`,
+          // container's bg is COLORS.primary — was COLORS.background (a
+          // "light bg needs light text" assumption that predates the lime accent)
+          color: `${COLORS.onPrimary}99`,
           marginBottom: SPACING.sm,
         },
         heroTitle: {
           fontSize: 34,
           fontWeight: "900",
           letterSpacing: -1,
-          color: COLORS.background,
+          color: COLORS.onPrimary,
           lineHeight: 38,
         },
 

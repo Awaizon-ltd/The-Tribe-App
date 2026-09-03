@@ -210,7 +210,7 @@ const AccountSwitcherModal = ({ visible, onClose }) => {
                     <View style={s.accountActions}>
                       {isActive && (
                         <View style={[s.activeBadge, { backgroundColor: COLORS.primary }]}>
-                          <Ionicons name="checkmark" size={12} color="#fff" />
+                          <Ionicons name="checkmark" size={12} color={COLORS.onPrimary} />
                         </View>
                       )}
                       <TouchableOpacity

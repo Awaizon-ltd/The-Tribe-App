@@ -66,6 +66,9 @@ export function useLaunchDAO() {
     ethFee: null,
     tokenFee: null,
     minTimelock: null,
+    feeTokenAddress: null,
+    feeTokenSymbol: null,
+    feeTokenDecimals: 18,
   });
   const [fetchingFees, setFetchingFees] = useState(false);
 
@@ -207,23 +210,52 @@ export function useLaunchDAO() {
       }
 
       const factory = new Contract(factoryAddress, factoryABI, provider);
-      
-      const [ethFee, tokenFee, minTimelock] = await Promise.all([
+
+      const [ethFee, tokenFee, minTimelock, feeTokenAddress] = await Promise.all([
         factory.ethDaoCreationFee(),
         factory.tokenDaoCreationFee(),
         factory.minTimelockHours(),
+        factory.feeToken(),
       ]);
+
+      // The factory's own feeToken() is the source of truth for what ERC20
+      // is accepted — read its symbol/decimals from the token contract
+      // itself rather than assuming/hardcoding a name. A zero address means
+      // this factory deployment hasn't configured token payment at all.
+      let feeTokenSymbol = null;
+      let feeTokenDecimals = 18;
+      const hasFeeToken = feeTokenAddress && feeTokenAddress !== '0x0000000000000000000000000000000000000000';
+
+      if (hasFeeToken) {
+        try {
+          const feeTokenContract = new Contract(feeTokenAddress, ERC20_ABI, provider);
+          const [symbol, decimals] = await Promise.all([
+            feeTokenContract.symbol(),
+            feeTokenContract.decimals(),
+          ]);
+          feeTokenSymbol = symbol;
+          feeTokenDecimals = Number(decimals);
+        } catch (feeTokenErr) {
+          console.warn('[useLaunchDAO] feeToken is set but not a readable ERC20:', feeTokenErr.message);
+        }
+      }
 
       setCreationFees({
         ethFee: ethFee.toString(),
         tokenFee: tokenFee.toString(),
         minTimelock: Number(minTimelock),
+        feeTokenAddress: hasFeeToken ? feeTokenAddress : null,
+        feeTokenSymbol,
+        feeTokenDecimals,
       });
-      
+
       console.log('[useLaunchDAO] Fees fetched successfully:', {
         ethFee: ethFee.toString(),
         tokenFee: tokenFee.toString(),
         minTimelock: Number(minTimelock),
+        feeTokenAddress,
+        feeTokenSymbol,
+        feeTokenDecimals,
       });
     } catch (error) {
       console.error('[useLaunchDAO] Error fetching creation fees:', error);

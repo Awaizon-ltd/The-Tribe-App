@@ -3,8 +3,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth }     from '../contexts/AuthContext';
 import { useUserData } from '../contexts/UserDataContext';
-import api from '../services/GuildApiService';
-import * as GuildCache from '../utils/GuildCache';
+import api from '../services/TribeApiService';
+import * as TribeCache from '../utils/TribeCache';
 import { updateEngagement, subscribe as subscribeEngagement } from '../utils/PostEngagementStore';
 
 const POLL_MS   = 8_000;  // poll every 8 s — less aggressive than chat
@@ -36,7 +36,7 @@ export const useActivityFeed = () => {
 
     // 1. Show SQLite cache immediately
     if (!isRefresh) {
-      const { data: cached, stale: feedStale } = await GuildCache.getFeed(PAGE_SIZE, 1);
+      const { data: cached, stale: feedStale } = await TribeCache.getFeed(PAGE_SIZE, 1);
       if (cached.length > 0) {
         setPosts(cached);
         latestTs.current = cached[0].timestamp || 0;
@@ -58,7 +58,7 @@ export const useActivityFeed = () => {
       setError(null);
 
       // Persist (replaces page 1 in cache)
-      GuildCache.saveFeed(data || [], { page: 1 }).catch(() => {});
+      TribeCache.saveFeed(data || [], { page: 1 }).catch(() => {});
     } catch (e) {
       setError(e.message);
       // Keep showing cached data — don't blank the list
@@ -93,7 +93,7 @@ export const useActivityFeed = () => {
         });
 
         // Prepend new posts to cache so the next cold open shows them
-        GuildCache.saveFeed(fresh, { prepend: true }).catch(() => {});
+        TribeCache.saveFeed(fresh, { prepend: true }).catch(() => {});
       } catch {}
     };
 
@@ -127,7 +127,7 @@ export const useActivityFeed = () => {
 
     try {
       // Try SQLite page first
-      const { data: cachedPage } = await GuildCache.getFeed(PAGE_SIZE, nextPage);
+      const { data: cachedPage } = await TribeCache.getFeed(PAGE_SIZE, nextPage);
       if (cachedPage.length >= PAGE_SIZE) {
         setPosts((prev) => {
           const ids = new Set(prev.map((p) => p.id));
@@ -148,7 +148,7 @@ export const useActivityFeed = () => {
       });
       pageRef.current = nextPage;
       setHasMore(data.length === PAGE_SIZE);
-      GuildCache.saveFeed(data, { page: nextPage }).catch(() => {});
+      TribeCache.saveFeed(data, { page: nextPage }).catch(() => {});
     } catch {}
     finally { setMore(false); }
   }, [hasMore, loadingMore]);
@@ -157,28 +157,28 @@ export const useActivityFeed = () => {
   const handleReact = useCallback(async (postId, reactionType) => {
     if (!user) return;
 
-    let guildId;
+    let tribeId;
     let newCounts;
     let newReaction;
 
     setPosts((prev) => prev.map((p) => {
       if (p.id !== postId) return p;
-      guildId = p.guildId;
+      tribeId = p.tribeId;
       const wasMyReaction = p.myReaction;
       newCounts = { ...(p.reactionCounts || {}) };
       if (wasMyReaction) newCounts[wasMyReaction] = Math.max((newCounts[wasMyReaction] || 1) - 1, 0);
       const isToggle = wasMyReaction === reactionType;
       if (!isToggle) newCounts[reactionType] = (newCounts[reactionType] || 0) + 1;
       newReaction = isToggle ? null : reactionType;
-      GuildCache.updateFeedReaction(postId, newReaction, newCounts).catch(() => {});
+      TribeCache.updateFeedReaction(postId, newReaction, newCounts).catch(() => {});
       return { ...p, myReaction: newReaction, reactionCounts: newCounts };
     }));
 
-    // Publish to store so guild view can reflect the updated reaction counts
+    // Publish to store so tribe view can reflect the updated reaction counts
     updateEngagement(postId, { reactionCounts: newCounts, myReaction: newReaction });
 
     try {
-      await api.reactToPost(guildId, postId, reactionType);
+      await api.reactToPost(tribeId, postId, reactionType);
     } catch {
       load();
     }
@@ -188,7 +188,7 @@ export const useActivityFeed = () => {
   const handleRepost = useCallback(async (post, comment = null) => {
     if (!user) return;
     try {
-      await api.repost(post.guildId, post.id, {
+      await api.repost(post.tribeId, post.id, {
         username:   userData?.username || user.email?.split('@')[0],
         userAvatar: userData?.profilePicture || null,
         comment,
@@ -200,7 +200,7 @@ export const useActivityFeed = () => {
           : p,
         ),
       );
-      GuildCache.markFeedReposted(post.id, newCount).catch(() => {});
+      TribeCache.markFeedReposted(post.id, newCount).catch(() => {});
     } catch (e) {
       throw e;
     }
@@ -231,7 +231,7 @@ export const useGovernanceFeed = () => {
 
     (async () => {
       // 1. Show SQLite cache immediately (zero-latency paint)
-      const { data: cached, stale } = await GuildCache.getGovernanceFeed();
+      const { data: cached, stale } = await TribeCache.getGovernanceFeed();
       if (cached.length && active) {
         setLinkedDAOs(cached);
         setLoading(false);
@@ -244,7 +244,7 @@ export const useGovernanceFeed = () => {
         if (!active) return;
         const daos = data?.linkedDAOs || [];
         setLinkedDAOs(daos);
-        GuildCache.saveGovernanceFeed(daos).catch(() => {});
+        TribeCache.saveGovernanceFeed(daos).catch(() => {});
       } catch {
         // Silently keep cached data on failure
       } finally {

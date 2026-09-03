@@ -12,9 +12,12 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useUserData } from '../../contexts/UserDataContext';
 import { useWallet } from '../../contexts/WalletContext';
-import { useAppMode, APP_MODES } from '../../contexts/AppModeContext';
-import { useChain } from '../../contexts/ChainContext';
-import { SUPPORTED_CHAINS } from '../../constants/Chain';
+import { useAppMode } from '../../contexts/AppModeContext';
+// import { APP_MODES } from '../../contexts/AppModeContext'; // mode-toggle only
+// Wallet-mode toggle disabled for now — app stays on Community mode. Re-enable
+// by uncommenting these two imports and the pieces marked below.
+// import { useChain } from '../../contexts/ChainContext';
+// import { SUPPORTED_CHAINS } from '../../constants/Chain';
 import { formatAddress } from '../../utils/Wallet';
 import ChainSwitcher from '../wallet/ChainSwitcher';
 import AccountSwitcherModal from '../wallet/AccountSwitcherModal';
@@ -26,8 +29,9 @@ const ProfileDrawerContent = ({ navigation }) => {
   const { logout }     = useAuth();
   const { userData }   = useUserData();
   const { wallet, accounts, activeAccountIndex } = useWallet();
-  const { mode, setMode, isWalletMode, isSwitching } = useAppMode();
-  const { switchChain, activeChain } = useChain();
+  const { isWalletMode } = useAppMode();
+  // const { mode, setMode, isSwitching } = useAppMode(); // mode-toggle only
+  // const { switchChain, activeChain } = useChain();
   const insets = useSafeAreaInsets();
 
   const [showChainSwitcher,   setShowChainSwitcher]   = useState(false);
@@ -44,15 +48,17 @@ const ProfileDrawerContent = ({ navigation }) => {
 
   const handleLogout = () => { navigation.closeDrawer(); logout(); };
 
-  const handleModeSwitch = (newMode) => {
-    if (newMode === mode || isSwitching) return;
-    navigation.closeDrawer();
-    setMode(newMode, () => {
-      if (newMode === APP_MODES.COMMUNITY && activeChain?.id !== SUPPORTED_CHAINS.BASE.id) {
-        switchChain(SUPPORTED_CHAINS.BASE).catch(console.error);
-      }
-    });
-  };
+  // Wallet-mode toggle disabled for now — see the commented-out mode bar
+  // below. Re-enable by restoring this function and its imports above.
+  // const handleModeSwitch = (newMode) => {
+  //   if (newMode === mode || isSwitching) return;
+  //   navigation.closeDrawer();
+  //   setMode(newMode, () => {
+  //     if (newMode === APP_MODES.COMMUNITY && activeChain?.id !== SUPPORTED_CHAINS.ROBINHOOD.id) {
+  //       switchChain(SUPPORTED_CHAINS.ROBINHOOD).catch(console.error);
+  //     }
+  //   });
+  // };
 
   // Active account label for the drawer header
   const activeAccount = accounts.find((a) => a.index === activeAccountIndex);
@@ -144,7 +150,7 @@ const ProfileDrawerContent = ({ navigation }) => {
           icon="gift-outline"
           label="Refer Friends"
           onPress={() => navigate('ReferFriends')}
-          tint="#8b5cf6"
+          tint="#D6FF00"
         />
       </View>
 
@@ -247,7 +253,10 @@ const ProfileDrawerContent = ({ navigation }) => {
         </TouchableOpacity>
       </ScrollView>
 
-      {/* ── Mode toggle bar — pinned bottom ── */}
+      {/* ── Mode toggle bar — pinned bottom ──
+          Disabled for now — app stays on Community mode. Re-enable by
+          restoring this block, handleModeSwitch above, and the
+          mode/setMode/isSwitching + useChain/SUPPORTED_CHAINS imports.
       <View style={[styles.modeBar, { paddingBottom: insets.bottom + SPACING.xs }]}>
         <View style={styles.modeRow}>
           <Text style={styles.modeLabel}>Wallet Mode</Text>
@@ -260,6 +269,7 @@ const ProfileDrawerContent = ({ navigation }) => {
           />
         </View>
       </View>
+      */}
 
       {/* ── Modals (rendered outside the ScrollView so they cover the full screen) ── */}
       <ChainSwitcher

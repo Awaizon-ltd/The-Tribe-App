@@ -1,0 +1,20 @@
+{
+  "name": "@tribe/miniapp-sdk",
+  "version": "1.1.0",
+  "description": "Client SDK for building mini-apps and mini-games that run inside the Tribe wallet app.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./manifest": "./manifest.schema.js",
+    "./protocol": "./bridge/Protocol.js"
+  },
+  "files": [
+    "index.js",
+    "manifest.schema.js",
+    "bridge/Protocol.js",
+    "README.md"
+  ],
+  "keywords": ["tribe", "miniapp", "webview-bridge", "wallet"],
+  "license": "UNLICENSED"
+}

@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { COLORS, SPACING, FONTS } from '../../constants/Theme';
 import {
@@ -28,6 +29,7 @@ const LiveChatScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const flatListRef = useRef(null);
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     initializeChat();
@@ -150,7 +152,7 @@ const LiveChatScreen = ({ navigation }) => {
   if (loading) {
     return (
       <View style={styles.container}>
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={COLORS.text} />
           </TouchableOpacity>
@@ -224,9 +226,9 @@ const LiveChatScreen = ({ navigation }) => {
           disabled={!inputText.trim() || sending}
         >
           {sending ? (
-            <ActivityIndicator size="small" color="#FFF" />
+            <ActivityIndicator size="small" color={COLORS.onPrimary} />
           ) : (
-            <Ionicons name="send" size={20} color="#FFF" />
+            <Ionicons name="send" size={20} color={COLORS.onPrimary} />
           )}
         </TouchableOpacity>
       </View>

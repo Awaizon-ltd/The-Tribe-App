@@ -91,10 +91,10 @@ const WSYNCard = ({ onMintPress, onRefreshRef }) => {
   };
 
   const networkLabel =
-    activeChain.id === 84532
-      ? "Base Sepolia"
-      : activeChain.id === 8453
-      ? "Base"
+    activeChain.id === 46630
+      ? "Robinhood Testnet"
+      : activeChain.id === 4663
+      ? "Robinhood Chain"
       : null;
 
   const styles = createStyles(COLORS);
@@ -146,9 +146,9 @@ const WSYNCard = ({ onMintPress, onRefreshRef }) => {
           ) : !isOnSupportedChain ? (
             <TouchableOpacity
               style={styles.switchButton}
-              onPress={() => switchChainById(84532)}
+              onPress={() => switchChainById(46630)}
             >
-              <Text style={styles.switchButtonText}>Switch to Base</Text>
+              <Text style={styles.switchButtonText}>Switch to Robinhood</Text>
             </TouchableOpacity>
           ) : loading ? (
             <ActivityIndicator size="small" color={COLORS.primary} />

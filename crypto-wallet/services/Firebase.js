@@ -17,8 +17,7 @@ import {
   reauthenticateWithCredential,
   updatePassword,
 } from 'firebase/auth';
-import { getDatabase } from 'firebase/database';
-import { 
+import {
   getFirestore, 
   doc, 
   setDoc, 
@@ -44,15 +43,19 @@ import {
   deleteObject,
 } from 'firebase/storage';
 
+// Switched from the "sysfi-protocol" project to "the-tribe-community-app"
+// (matches the app's real name/branding). Existing Firestore data (users,
+// wallets, support chats) lived under sysfi-protocol and is not reachable
+// under this project unless separately migrated — this only repoints the
+// client SDK, it doesn't move data.
 const firebaseConfig = {
-  apiKey: "AIzaSyAMq_-pvAk2ifDB9VEwmcmcgnuClvL66Dw",
-  authDomain: "sysfi-protocol.firebaseapp.com",
-  databaseURL: "https://sysfi-protocol-default-rtdb.firebaseio.com",
-  projectId: "sysfi-protocol",
-  storageBucket: "sysfi-protocol.appspot.com",
-  messagingSenderId: "201308188439",
-  appId: "1:201308188439:web:30aa0cfe8c052590815152",
-  measurementId: "G-J4HNBX6W1Y"
+  apiKey: "AIzaSyDRK4emsl-ab5tLZQHkwUqZbUka4fL-OWw",
+  authDomain: "the-tribe-community-app.firebaseapp.com",
+  projectId: "the-tribe-community-app",
+  storageBucket: "the-tribe-community-app.firebasestorage.app",
+  messagingSenderId: "149208464601",
+  appId: "1:149208464601:web:c31039b1c073585c8a12c8",
+  measurementId: "G-TNCJB06G2D",
 };
 
 // Initialize Firebase
@@ -62,7 +65,11 @@ const auth = initializeAuth(app, {
 });
 const db = getFirestore(app);
 const storage = getStorage(app);
-const database = getDatabase(app);
+// Realtime Database (getDatabase) was previously initialized here but never
+// actually used anywhere in the app (nothing imports `database` from this
+// file) — removed rather than carried over, since the new project's config
+// has no databaseURL and getDatabase(app) would throw at startup without
+// one unless the new project also has RTDB provisioned.
 
 // ============ Cache Configuration ============
 const CACHE_KEYS = {
@@ -813,11 +820,10 @@ export const saveUserPreferences = async (userId, preferences) => {
 
 // ============ Exports ============
 
-export { 
-  auth, 
-  db, 
-  storage, 
-  database,
+export {
+  auth,
+  db,
+  storage,
   // Cache utilities
   getCachedData,
   setCachedData,

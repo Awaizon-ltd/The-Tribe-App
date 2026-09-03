@@ -5,6 +5,7 @@ import React, {
   useContext,
   useRef,
   useCallback,
+  useMemo,
 } from "react";
 import {
   registerUser,
@@ -23,6 +24,7 @@ import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../services/Firebase";
 import { saveUser, getUserByUid } from "../utils/Database";
 import { useLoading } from "./LoadingContext";
+import { signInWithGoogleIdToken, completeGoogleAccountLink } from "../services/GoogleAuthService";
 
 const AuthContext = createContext();
 
@@ -113,6 +115,12 @@ export const AuthProvider = ({ children }) => {
             // Firebase Auth is the source of truth — put LAST so Firestore's
             // emailVerified field (often stale) never overrides it.
             emailVerified: firebaseUser.emailVerified,
+            // Which sign-in providers this account has (e.g. "password",
+            // "google.com") — used by hasPasswordProvider below to decide
+            // whether the wallet's cloud copy can use the account password
+            // as its encryption passphrase, or needs the separate Wallet
+            // Backup Password flow (Google-only accounts have no password).
+            providerData: firebaseUser.providerData,
           };
 
           if (mounted && isMountedRef.current) {
@@ -133,6 +141,7 @@ export const AuthProvider = ({ children }) => {
             email: firebaseUser.email,
             emailVerified: firebaseUser.emailVerified,
             displayName: firebaseUser.displayName || "",
+            providerData: firebaseUser.providerData,
           });
         }
       } finally {
@@ -390,6 +399,64 @@ export const AuthProvider = ({ children }) => {
     [showLoading, updateLoading, hideLoading]
   );
 
+  // Google sign-in/sign-up. Deliberately does NOT set tempCloudPassword —
+  // there is no password to set. Downstream wallet-creation/restore screens
+  // must branch on `hasPasswordProvider` (below) instead of assuming a
+  // password is available.
+  const loginWithGoogle = useCallback(
+    async (idToken) => {
+      try {
+        setError(null);
+        showLoading("Signing in with Google...");
+        const { user: firebaseUser, isNewUser } = await signInWithGoogleIdToken(idToken);
+        if (!isMountedRef.current) return;
+        hideLoading();
+        return { user: firebaseUser, isNewUser };
+      } catch (err) {
+        console.error("[AuthContext] Google login error:", err);
+        hideLoading();
+        // Surface the friendlier conflict message from GoogleAuthService
+        // as-is (it already explains what happened); pass its extra fields
+        // (email/pendingCredential/existingMethods) through unchanged so
+        // the calling screen can drive the link flow.
+        setError(err.message);
+        throw err;
+      }
+    },
+    [showLoading, hideLoading],
+  );
+
+  // Completes account-linking after the user re-authenticated with their
+  // original method following an auth/account-exists-with-different-credential
+  // conflict from loginWithGoogle. Attaches Google to the SAME account
+  // (same UID, same wallet) rather than creating a duplicate.
+  const linkGoogleAccount = useCallback(
+    async (pendingCredential) => {
+      try {
+        setError(null);
+        showLoading("Linking Google account...");
+        const result = await completeGoogleAccountLink(pendingCredential);
+        hideLoading();
+        return result;
+      } catch (err) {
+        console.error("[AuthContext] Google account link error:", err);
+        hideLoading();
+        setError(err.message);
+        throw err;
+      }
+    },
+    [showLoading, hideLoading],
+  );
+
+  // The correct branch condition for "does this account have a password
+  // that can encrypt the wallet's cloud copy" — NOT "is this a Google
+  // user", since a linked account (Google + password) still has one.
+  // Always derived from the live Firebase user, never stale.
+  const hasPasswordProvider = useMemo(
+    () => !!user?.providerData?.some((p) => p.providerId === "password"),
+    [user?.providerData],
+  );
+
   const logout = useCallback(async () => {
     try {
       setError(null);
@@ -465,6 +532,9 @@ export const AuthProvider = ({ children }) => {
     register,
     login,
     logout,
+    loginWithGoogle,
+    linkGoogleAccount,
+    hasPasswordProvider,
     isAuthenticated: !!user,
     tempCloudPassword,
     clearTempPassword,

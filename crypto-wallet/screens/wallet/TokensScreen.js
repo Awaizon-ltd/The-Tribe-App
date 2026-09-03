@@ -15,6 +15,7 @@ import {
   Animated,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useWallet } from "../../contexts/WalletContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { useTheme } from "../../contexts/ThemeContext";
@@ -171,6 +172,10 @@ const NATIVE_SENTINEL = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
 
 const buildLogoSources = (logoURI, address, symbol) => {
   const sources = [];
+  // A local bundled asset (require('...png'), e.g. a chain's native-token
+  // logo pulled from SUPPORTED_CHAINS[...].icon) resolves to a number/object,
+  // not a string — no .endsWith, and no CDN fallback chain makes sense for it.
+  if (logoURI && typeof logoURI !== "string") return [logoURI];
   if (logoURI) {
     sources.push(logoURI);
     if (logoURI.endsWith(".svg")) sources.push(logoURI.replace(".svg", ".png"));
@@ -194,7 +199,7 @@ const LOGO_COLORS = [
   "#10b981",
   "#3b82f6",
   "#ef4444",
-  "#8b5cf6",
+  "#d6ff00",
   "#f97316",
   "#06b6d4",
 ];
@@ -215,7 +220,7 @@ const TokenLogo = ({ uri, address, symbol, size = 44, theme }) => {
   if (currentSrc) {
     return (
       <Image
-        source={{ uri: currentSrc }}
+        source={typeof currentSrc === "string" ? { uri: currentSrc } : currentSrc}
         style={{ width: size, height: size, borderRadius: size / 2 }}
         onError={() => setSrcIndex((i) => i + 1)}
         fadeDuration={150}
@@ -639,6 +644,7 @@ const SectionLabel = ({ label, count, theme }) => (
 const TokensScreen = ({ navigation }) => {
   const theme = useTheme();
   const styles = createStyles(theme);
+  const insets = useSafeAreaInsets();
   const { selectedChain, wallet } = useWallet();
   const { user } = useAuth();
 
@@ -887,6 +893,7 @@ const TokensScreen = ({ navigation }) => {
         style={[
           styles.topBar,
           {
+            paddingTop: insets.top + 8,
             backgroundColor: theme.COLORS.surface,
             borderBottomColor: theme.COLORS.border,
           },
@@ -984,7 +991,7 @@ const TokensScreen = ({ navigation }) => {
                   ]}
                   onPress={() => navigation.navigate("TokenImport")}
                 >
-                  <Ionicons name="add" size={16} color="#fff" />
+                  <Ionicons name="add" size={16} color={theme.COLORS.onPrimary} />
                   <Text style={styles.addBtnTxt}>Manage Tokens</Text>
                 </TouchableOpacity>
               </View>
@@ -1061,7 +1068,7 @@ const createStyles = (theme) =>
       borderRadius: 20,
       marginTop: 12,
     },
-    addBtnTxt: { color: "#fff", fontWeight: "700", fontSize: 14 },
+    addBtnTxt: { color: theme.COLORS.onPrimary, fontWeight: "700", fontSize: 14 },
   });
 
 export default TokensScreen;

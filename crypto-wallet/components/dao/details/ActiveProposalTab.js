@@ -58,12 +58,12 @@ const FilterChip = ({ label, active, onPress, count, theme }) => {
       onPress={onPress}
       activeOpacity={0.7}
     >
-      <Text style={[s.chipText, { color: active ? '#fff' : COLORS.textSecondary }]}>
+      <Text style={[s.chipText, { color: active ? COLORS.onPrimary : COLORS.textSecondary }]}>
         {label}
       </Text>
       {count != null && (
-        <View style={[s.chipBadge, { backgroundColor: active ? 'rgba(255,255,255,0.28)' : COLORS.border }]}>
-          <Text style={[s.chipBadgeText, { color: active ? '#fff' : COLORS.text }]}>{count}</Text>
+        <View style={[s.chipBadge, { backgroundColor: active ? 'rgba(0,0,0,0.14)' : COLORS.border }]}>
+          <Text style={[s.chipBadgeText, { color: active ? COLORS.onPrimary : COLORS.text }]}>{count}</Text>
         </View>
       )}
     </TouchableOpacity>
@@ -191,8 +191,8 @@ const ProposalCard = ({ proposal, userInfo, userVote, onPress, onVote, onFinaliz
           style={[s.finalizeBtn, { backgroundColor: COLORS.primary }]}
           onPress={() => onFinalize(proposal.id)}
         >
-          <Ionicons name="flag-outline" size={15} color="#fff" />
-          <Text style={s.finalizeBtnText}>Finalize Voting</Text>
+          <Ionicons name="flag-outline" size={15} color={COLORS.onPrimary} />
+          <Text style={[s.finalizeBtnText, { color: COLORS.onPrimary }]}>Finalize Voting</Text>
         </TouchableOpacity>
       )}
     </TouchableOpacity>

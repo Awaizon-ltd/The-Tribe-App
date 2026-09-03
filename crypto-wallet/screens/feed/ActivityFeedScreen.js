@@ -1,5 +1,5 @@
 // screens/feed/ActivityFeedScreen.js
-// Social activity feed — two tabs: Activity (guild posts) + Governance (DAO proposals).
+// Social activity feed — two tabs: Activity (tribe posts) + Governance (DAO proposals).
 // Posts are ranked by the visibility score algorithm (engagement × diversity ÷ age).
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
@@ -20,7 +20,7 @@ import FeedPostCard           from '../../components/feed/FeedPostCard';
 import ProposalFeedCard       from '../../components/feed/ProposalFeedCard';
 import CommentsModal          from '../../components/post/CommentsModal';
 import Alert                  from '../../utils/Alert';
-import api                    from '../../services/GuildApiService';
+import api                    from '../../services/TribeApiService';
 
 const TABS = [
   { id: 'activity',    label: 'Activity',    icon: 'flame-outline' },
@@ -122,7 +122,7 @@ const rm = StyleSheet.create({
 
 // ── Governance sub-feed (one DAO) ─────────────────────────────────────────────
 // Each linked DAO gets its own mini-section. We use useDAOContract per DAO.
-const DAOProposalSection = ({ dao, guildName, guildLogoUrl, navigation }) => {
+const DAOProposalSection = ({ dao, tribeName, tribeLogoUrl, navigation }) => {
   const { daoInfo, proposals, isLoading } = useDAOContract(dao.daoAddress);
   const { COLORS } = useTheme();
 
@@ -141,8 +141,8 @@ const DAOProposalSection = ({ dao, guildName, guildLogoUrl, navigation }) => {
           proposal={p}
           daoName={daoInfo?.name || daoInfo?.daoName || 'DAO'}
           daoAddress={dao.daoAddress}
-          guildName={guildName}
-          guildLogoUrl={guildLogoUrl}
+          tribeName={tribeName}
+          tribeLogoUrl={tribeLogoUrl}
           chainId={dao.chainId}
           onPress={(proposal, addr) =>
             navigation.navigate('ProposalDetail', { proposal, daoAddress: addr })
@@ -194,9 +194,9 @@ const ActivityFeedScreen = ({ navigation }) => {
 
   // ── Add comment (called from CommentsModal) ───────────────────────────────
   const handleAddComment = useCallback(async (postId, text) => {
-    const guildId = commentPost?.guildId;
-    if (!guildId || !text?.trim()) return;
-    await api.addComment(guildId, postId, {
+    const tribeId = commentPost?.tribeId;
+    if (!tribeId || !text?.trim()) return;
+    await api.addComment(tribeId, postId, {
       text:       text.trim(),
       username:   userData?.username || user?.email?.split('@')[0] || 'User',
       userAvatar: userData?.profilePicture || null,
@@ -210,9 +210,9 @@ const ActivityFeedScreen = ({ navigation }) => {
       onReact={handleReact}
       onComment={(p) => setCommentPost(p)}
       onRepost={(p) => setRepostTarget(p)}
-      onNavigateGuild={(gId) => navigation.navigate('GuildDetail', { guildId: gId })}
+      onNavigateTribe={(gId) => navigation.navigate('TribeDetail', { tribeId: gId })}
       canDelete={false}
-      onPressContent={() => navigation.navigate('PostDetail', { post: item, guildId: item.guildId })}
+      onPressContent={() => navigation.navigate('PostDetail', { post: item, tribeId: item.tribeId })}
     />
   ), [handleReact, navigation]);
 
@@ -220,9 +220,9 @@ const ActivityFeedScreen = ({ navigation }) => {
 
   const onViewableItemsChanged = useCallback(({ viewableItems }) => {
     viewableItems.forEach(({ item }) => {
-      if (item?.id && item?.guildId && !impressionsSent.current.has(item.id)) {
+      if (item?.id && item?.tribeId && !impressionsSent.current.has(item.id)) {
         impressionsSent.current.add(item.id);
-        api.trackImpression(item.guildId, item.id).catch(() => {});
+        api.trackImpression(item.tribeId, item.id).catch(() => {});
       }
     });
   }, []);
@@ -244,7 +244,7 @@ const ActivityFeedScreen = ({ navigation }) => {
           </View>
           <Text style={[s.emptyTitle, { color: COLORS.text }]}>No Governance Yet</Text>
           <Text style={[s.emptySub, { color: COLORS.textSecondary }]}>
-            Guild owners can link a DAO in Guild Settings to enable governance proposals here.
+            Tribe owners can link a DAO in Tribe Settings to enable governance proposals here.
           </Text>
         </View>
       );
@@ -256,8 +256,8 @@ const ActivityFeedScreen = ({ navigation }) => {
         renderItem={({ item }) => (
           <DAOProposalSection
             dao={item}
-            guildName={item.guildName}
-            guildLogoUrl={item.guildLogo}
+            tribeName={item.tribeName}
+            tribeLogoUrl={item.tribeLogo}
             navigation={navigation}
           />
         )}
@@ -287,7 +287,7 @@ const ActivityFeedScreen = ({ navigation }) => {
     </View>
   }
   rightActions={[
-    { icon: 'search-outline', onPress: () => navigation.navigate('SearchGuild') },
+    { icon: 'search-outline', onPress: () => navigation.navigate('SearchTribe') },
   ]}
 />
 
@@ -377,13 +377,13 @@ const ActivityFeedScreen = ({ navigation }) => {
                   </View>
                   <Text style={[s.emptyTitle, { color: COLORS.text }]}>Nothing here yet</Text>
                   <Text style={[s.emptySub, { color: COLORS.textSecondary }]}>
-                    Join guilds to see their posts ranked by activity
+                    Join tribes to see their posts ranked by activity
                   </Text>
                   <TouchableOpacity
                     style={[s.retryBtn, { backgroundColor: COLORS.primary }]}
-                    onPress={() => navigation.navigate('SearchGuild')}
+                    onPress={() => navigation.navigate('SearchTribe')}
                   >
-                    <Text style={{ color: '#FFF', fontWeight: '600' }}>Explore Guilds</Text>
+                    <Text style={{ color: '#FFF', fontWeight: '600' }}>Explore Tribes</Text>
                   </TouchableOpacity>
                 </View>
               )
@@ -399,7 +399,7 @@ const ActivityFeedScreen = ({ navigation }) => {
         <CommentsModal
           visible={!!commentPost}
           post={commentPost}
-          guildId={commentPost?.guildId}
+          tribeId={commentPost?.tribeId}
           onClose={() => setCommentPost(null)}
           onAddComment={handleAddComment}
         />

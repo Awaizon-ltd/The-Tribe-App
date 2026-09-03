@@ -7,7 +7,7 @@ import {
 } from "./Providers";
 import { getAlchemyInstance } from "./Alchemy";
 
-// Base mainnet (8453) and Base Sepolia (84532) both support Alchemy's getAssetTransfers.
+// Base mainnet (8453) supports Alchemy's getAssetTransfers.
 // "internal" category is only available on Ethereum and Polygon — not needed for Base.
 const getCategoriesForChain = (_chainId) => [
   "external",

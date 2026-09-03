@@ -19,7 +19,7 @@ const HEADER_PADDING_BOTTOM = 6;
  * @param {Array}    [rightActions]  [{ icon, onPress, badge?, element? }]
  *                                  Pass element instead of icon for custom JSX
  * @param {boolean}  [border]        Hairline bottom border (default false)
- * @param {boolean}  [showLogo]      Replace title with a centered app logo (Feed, Guilds only)
+ * @param {boolean}  [showLogo]      Replace title with a centered app logo (Feed, Tribes only)
  */
 const TabHeader = ({ title, subtitle, left, rightActions = [], border = false, showLogo = false }) => {
   const { COLORS, FONTS, SPACING, isDark } = useTheme();

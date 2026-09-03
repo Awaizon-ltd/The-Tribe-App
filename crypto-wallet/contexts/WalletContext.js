@@ -22,6 +22,7 @@ import {
   encryptWallet,
   unlockWallet,
   validatePassword, // FIX 2: Restored missing import
+  SCRYPT_N_CLOUD,
 } from "../utils/Encryption";
 import {
   // FIX 3: Restored all missing AttemptLimiter imports
@@ -336,7 +337,12 @@ export const WalletProvider = ({ children }) => {
   // ── Signer creation ────────────────────────────────────────────────────────
 
   // FIX 7: Restored checkLocked / recordFailedAttempt / clearAttempts guards here too.
-  const createSignerForTransaction = async (passcode) => {
+  // `chainOverride` lets a caller sign against a chain other than the wallet's
+  // currently active one — needed for cross-chain LI.FI swaps initiated from
+  // Community mode, which stays pinned to Robinhood Chain (activeChain) while
+  // the user "funds in" from a different source chain. Defaults to
+  // activeChain, so every existing call site is unaffected.
+  const createSignerForTransaction = async (passcode, chainOverride) => {
     const lockStatus = await checkLocked("passcode");
     if (lockStatus.locked) {
       throw new Error(formatLockMessage(lockStatus.remainingMs));
@@ -367,8 +373,9 @@ export const WalletProvider = ({ children }) => {
         privateKeyHex = derived.privateKey;
       }
 
-      if (!activeChain?.id || !activeChain?.rpcUrl) throw new Error("No active chain configured.");
-      const safeProvider = await getProviderSafe(activeChain);
+      const signingChain = chainOverride ?? activeChain;
+      if (!signingChain?.id || !signingChain?.rpcUrl) throw new Error("No active chain configured.");
+      const safeProvider = await getProviderSafe(signingChain);
       const rawWallet = new Wallet(privateKeyHex, safeProvider);
       privateKeyHex = null; // zero out key material from local scope
 
@@ -491,8 +498,8 @@ export const WalletProvider = ({ children }) => {
         publicKey: account.publicKey, createdAt: new Date().toISOString(),
       };
 
-      const cloudEncryption = await encryptWallet(walletData, cloudPassword, account.address); // FIX 9a
-      const localEncryption = await encryptWallet(walletData, localPasscode);
+      const cloudEncryption = await encryptWallet(walletData, cloudPassword, account.address, SCRYPT_N_CLOUD); // FIX 9a
+      const localEncryption = await encryptWallet(walletData, localPasscode, account.address);
 
       const dbUser = await getUserByUid(user.uid);
       let walletId = null;
@@ -506,6 +513,7 @@ export const WalletProvider = ({ children }) => {
         address: account.address, encrypted: cloudEncryption.encrypted,
         salt: cloudEncryption.salt, iv: cloudEncryption.iv,
         authTag: cloudEncryption.authTag, version: cloudEncryption.version,
+        scryptN: cloudEncryption.scryptN,
       });
 
       const defaultAccounts = [{ index: 0, address: account.address, name: "Account 1" }];
@@ -514,7 +522,7 @@ export const WalletProvider = ({ children }) => {
         accounts: defaultAccounts,
         encrypted: localEncryption.encrypted, salt: localEncryption.salt,
         iv: localEncryption.iv, authTag: localEncryption.authTag,
-        version: localEncryption.version,
+        version: localEncryption.version, scryptN: localEncryption.scryptN,
       }));
 
       setAccounts(defaultAccounts);
@@ -545,8 +553,8 @@ export const WalletProvider = ({ children }) => {
         createdAt: new Date().toISOString(),
       };
 
-      const cloudEncryption = await encryptWallet(walletData, cloudPassword, account.address); // FIX 9b
-      const localEncryption = await encryptWallet(walletData, localPasscode);
+      const cloudEncryption = await encryptWallet(walletData, cloudPassword, account.address, SCRYPT_N_CLOUD); // FIX 9b
+      const localEncryption = await encryptWallet(walletData, localPasscode, account.address);
 
       const dbUser = await getUserByUid(user.uid);
       let walletId = null;
@@ -560,6 +568,7 @@ export const WalletProvider = ({ children }) => {
         address: account.address, encrypted: cloudEncryption.encrypted,
         salt: cloudEncryption.salt, iv: cloudEncryption.iv,
         authTag: cloudEncryption.authTag, version: cloudEncryption.version,
+        scryptN: cloudEncryption.scryptN,
       });
 
       const defaultAccounts = [{ index: 0, address: account.address, name: "Account 1" }];
@@ -568,7 +577,7 @@ export const WalletProvider = ({ children }) => {
         accounts: defaultAccounts,
         encrypted: localEncryption.encrypted, salt: localEncryption.salt,
         iv: localEncryption.iv, authTag: localEncryption.authTag,
-        version: localEncryption.version,
+        version: localEncryption.version, scryptN: localEncryption.scryptN,
       }));
 
       setAccounts(defaultAccounts); setActiveAccountIndex(0);
@@ -607,7 +616,9 @@ export const WalletProvider = ({ children }) => {
       const cloudWallet = await getEncryptedWallet(user.uid);
       if (!cloudWallet) throw new Error("No cloud wallet found");
 
-      const result = await unlockWallet(cloudWallet, cloudPassword);
+      // CLOUD cost profile — this payload was (or will be) scrypt-derived at
+      // the higher N, matching how createWallet/importWallet encrypt it.
+      const result = await unlockWallet(cloudWallet, cloudPassword, SCRYPT_N_CLOUD);
       const decryptedData = result.walletData;
 
       if (result.needsMigration) {
@@ -617,6 +628,7 @@ export const WalletProvider = ({ children }) => {
           decryptedData,
           cloudPassword,
           cloudWallet.address, // AAD — same as v1
+          SCRYPT_N_CLOUD,
         );
         await saveEncryptedWallet(user.uid, {
           address: cloudWallet.address,
@@ -625,6 +637,7 @@ export const WalletProvider = ({ children }) => {
           iv: latestEncryption.iv,
           authTag: latestEncryption.authTag,
           version: latestEncryption.version,
+          scryptN: latestEncryption.scryptN,
         });
 
         if (cloudWallet.isLegacy) {
@@ -657,7 +670,7 @@ export const WalletProvider = ({ children }) => {
 
   const setupLocalPasscode = async (passcode, walletDataArg) => {
     try {
-      const encryption = await encryptWallet(walletDataArg, passcode);
+      const encryption = await encryptWallet(walletDataArg, passcode, wallet.address);
       const existing   = await SecureStore.getItemAsync(APP_CONFIG.STORAGE_KEYS.LOCAL_WALLET);
       const parsed     = existing ? JSON.parse(existing) : {};
       await SecureStore.setItemAsync(APP_CONFIG.STORAGE_KEYS.LOCAL_WALLET, JSON.stringify({
@@ -666,6 +679,7 @@ export const WalletProvider = ({ children }) => {
         accounts: parsed.accounts || [{ index: 0, address: wallet.address, name: "Account 1" }],
         encrypted: encryption.encrypted, salt: encryption.salt,
         iv: encryption.iv, authTag: encryption.authTag, version: encryption.version,
+        scryptN: encryption.scryptN,
       }));
 
       // Ensure the wallet row exists in SQLite (the cloud-unlock path skips saveWallet).

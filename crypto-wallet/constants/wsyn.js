@@ -1,21 +1,27 @@
 // constants/wsyn.js
 // WSYN (WrappedSYN) token configuration.
 // Keep in sync with backend WSYN_ADDRESSES in mintRoutes.js.
+//
+// TRIBE launches on Robinhood Chain, not Base — both slots are placeholder
+// zero addresses until the contracts are actually deployed there (same
+// "update before launch" pattern the old Base Mainnet slot used).
 
 export const WSYN_CONTRACTS = {
-  84532: "0x3c181eaaB64052c726194Da6797EA06DD15e8E6B", // Base Sepolia (testnet)
-  8453:  "0x0000000000000000000000000000000000000000",  // Base Mainnet — update before mainnet launch
+  46630: "0x0000000000000000000000000000000000000000", // Robinhood Chain Testnet — update once deployed
+  4663:  "0x0000000000000000000000000000000000000000", // Robinhood Chain (mainnet) — update before launch
 };
 
 // Chain IDs where WSYN is available (or will be)
-export const SUPPORTED_WSYN_CHAIN_IDS = [84532, 8453];
+export const SUPPORTED_WSYN_CHAIN_IDS = [46630, 4663];
 
 export const WSYN_MINT_FEE_ETH = "0.0004";
 
-// Basescan explorer roots for tx links
+// Robinhood Chain's explorer root for tx links (same URL for both
+// mainnet/testnet — matches constants/Chain.js's ROBINHOOD/ROBINHOOD_TESTNET
+// entries, which share the one Blockscout instance today).
 export const WSYN_EXPLORER = {
-  84532: "https://sepolia.basescan.org",
-  8453:  "https://basescan.org",
+  46630: "https://robinhoodchain.blockscout.com",
+  4663:  "https://robinhoodchain.blockscout.com",
 };
 
 /**

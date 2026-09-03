@@ -1,6 +1,13 @@
 import React, { createContext, useState, useEffect, useContext, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { DEFAULT_CHAIN, SUPPORTED_CHAINS, getChainById } from '../constants/Chain';
+import { DEFAULT_CHAIN, SUPPORTED_CHAINS, getChainById, isTestnetAllowedInProduction } from '../constants/Chain';
+
+// A testnet is blocked in production unless it's on the short allow-list
+// (currently just Robinhood Chain Testnet, for Community mode) — see
+// constants/Chain.js's isTestnetAllowedInProduction for the single source
+// of truth on which testnet that is.
+const isBlockedTestnetInProduction = (chain) =>
+  !__DEV__ && chain?.testnet && !isTestnetAllowedInProduction(chain.id);
 import { APP_CONFIG } from '../constants/Config';
 
 const ChainContext = createContext();
@@ -68,8 +75,8 @@ export const ChainProvider = ({ children }) => {
         
         // Check if chain exists and is available in current environment
         if (chain) {
-          // In production, reject testnet chains
-          if (!__DEV__ && chain.testnet) {
+          // In production, reject testnet chains (except the allow-listed ones)
+          if (isBlockedTestnetInProduction(chain)) {
      
             const safeDefault = getSafeDefaultChain();
             setActiveChain(safeDefault);
@@ -108,8 +115,8 @@ export const ChainProvider = ({ children }) => {
         throw new Error(`Chain ${chain.name} (${chain.id}) is not supported`);
       }
 
-      // In production, prevent switching to testnet chains
-      if (!__DEV__ && validChain.testnet) {
+      // In production, prevent switching to testnet chains (except the allow-listed ones)
+      if (isBlockedTestnetInProduction(validChain)) {
         throw new Error(`Testnet chains are not available in production`);
       }
 
@@ -135,11 +142,11 @@ export const ChainProvider = ({ children }) => {
       throw new Error(`Chain with ID ${chainId} not found`);
     }
     
-    // In production, prevent switching to testnet chains
-    if (!__DEV__ && chain.testnet) {
+    // In production, prevent switching to testnet chains (except the allow-listed ones)
+    if (isBlockedTestnetInProduction(chain)) {
       throw new Error(`Testnet chains are not available in production`);
     }
-    
+
     return switchChain(chain);
   }, [switchChain]);
 
@@ -165,9 +172,9 @@ export const ChainProvider = ({ children }) => {
     const chain = getChainById(chainId);
     if (!chain) return false;
     
-    // In production, testnet chains are not supported
-    if (!__DEV__ && chain.testnet) return false;
-    
+    // In production, testnet chains are not supported (except the allow-listed ones)
+    if (isBlockedTestnetInProduction(chain)) return false;
+
     return true;
   }, []);
 
@@ -186,14 +193,15 @@ export const ChainProvider = ({ children }) => {
   }, []);
 
   /**
-   * Get testnet chains only (empty in production)
+   * Get testnet chains only (in production, only the allow-listed ones —
+   * currently just Robinhood Chain Testnet)
    */
   const getTestnetChains = useCallback(() => {
+    const testnets = Object.values(SUPPORTED_CHAINS).filter(chain => chain.testnet);
     if (!__DEV__) {
-      // Production: No testnets
-      return [];
+      return testnets.filter((chain) => isTestnetAllowedInProduction(chain.id));
     }
-    return Object.values(SUPPORTED_CHAINS).filter(chain => chain.testnet);
+    return testnets;
   }, []);
 
   const value = {

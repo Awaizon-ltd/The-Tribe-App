@@ -11,7 +11,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /**
  * WALLET     — pure non-custodial wallet (multi-chain, 4 tabs, no community)
- * COMMUNITY  — full app (Base-only, 5 tabs, DAOs / guilds)
+ * COMMUNITY  — full app (Robinhood Chain-only, 5 tabs, DAOs / tribes)
  */
 export const APP_MODES = {
   WALLET: 'wallet',
@@ -38,10 +38,14 @@ export const AppModeProvider = ({ children }) => {
   const timerRef = useRef(null);
 
   // Persist & load
+  // Wallet-mode toggle is disabled for now (see ProfileDrawerContent.js) —
+  // the app stays on Community mode even if a device has 'wallet' persisted
+  // from before. Restore `saved === APP_MODES.WALLET ||` below to bring
+  // wallet-mode restoration back once the toggle is re-enabled.
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY)
       .then((saved) => {
-        if (saved === APP_MODES.WALLET || saved === APP_MODES.COMMUNITY) {
+        if (/* saved === APP_MODES.WALLET || */ saved === APP_MODES.COMMUNITY) {
           setModeState(saved);
         }
       })
@@ -59,6 +63,11 @@ export const AppModeProvider = ({ children }) => {
    */
   const setMode = useCallback((newMode, afterSwitch) => {
     if (newMode !== APP_MODES.WALLET && newMode !== APP_MODES.COMMUNITY) return;
+    // Wallet-mode toggle disabled for now — the UI control that would call
+    // setMode(APP_MODES.WALLET) is commented out in ProfileDrawerContent.js,
+    // but guard here too so the app can't end up in wallet mode from any
+    // other path. Remove this guard to re-enable switching.
+    if (newMode === APP_MODES.WALLET) return;
     if (newMode === mode && !isSwitching) return; // no-op
 
     // Show splash immediately
