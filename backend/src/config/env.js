@@ -47,9 +47,6 @@ const schema = z.object({
   ADMIN_UIDS: z.string().optional(), // comma-separated Firebase UIDs allowed to review submissions
 
   // Blockchain
-  VOUCHER_SIGNER_KEY: z.string().optional(),
-  CHAIN_ID:           z.coerce.number().default(46630),
-
   FACTORY_ADDRESS_BASE:         z.string().default('0x0000000000000000000000000000000000000000'),
   FACTORY_ADDRESS_BASE_SEPOLIA: z.string().default('0x0000000000000000000000000000000000000000'),
   START_BLOCK_BASE:             z.coerce.number().optional(),

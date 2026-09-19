@@ -8,6 +8,7 @@ import arbitrumTokens from "../tokenLists/arbitrum.js";
 import baseTokens from "../tokenLists/base.js";
 import mantleTokens from "../tokenLists/mantle.js";
 import avalancheTokens from "../tokenLists/avalanche.js";
+import robinhoodTokens from "../tokenLists/robinhood.js";
 
 // ─── Fee Configuration ────────────────────────────────────────────────────────
 const FEE_RECIPIENT = "0xed60b71CEEEF9D25Ebda1C7465ad19Fc41D3A90c";
@@ -189,6 +190,7 @@ const TOKEN_LISTS = {
   8453: baseTokens,
   5000: mantleTokens,
   43114: avalancheTokens,
+  4663: robinhoodTokens,
 };
 
 const MANAGED_WRAPPED_ADDRESSES = new Set(
@@ -199,11 +201,11 @@ const MANAGED_WRAPPED_ADDRESSES = new Set(
 const getTokenList = (chainId) => {
   // Was `TOKEN_LISTS[chainId] ?? TOKEN_LISTS[1]` — silently handed out
   // Ethereum-mainnet token addresses mislabeled as belonging to whatever
-  // chain was actually requested (e.g. Robinhood Chain, chainId 4663, which
-  // has no curated list yet). Wrong contract addresses in a swap flow risk
-  // real fund loss, so an unlisted chain now gets an empty ERC20 list —
-  // still swappable via its native token, and "Import Token" covers
-  // anything else by address — instead of a wrong one.
+  // chain was actually requested. Wrong contract addresses in a swap flow
+  // risk real fund loss, so a chain with no curated list here gets an empty
+  // ERC20 list — still swappable via its native token, and "Import Token"
+  // covers anything else by address — instead of a wrong one. Robinhood
+  // Chain (4663) has its own curated list (tokenLists/robinhood.js).
   const erc20s = (TOKEN_LISTS[chainId] ?? []).filter(
     (t) => !MANAGED_WRAPPED_ADDRESSES.has(t.address.toLowerCase()),
   );
@@ -254,7 +256,7 @@ const extract0xError = (data) => {
 
 export const getTokens = async (req, res, next) => {
   try {
-    const chainId = parseInt(req.query.chainId ?? 1);
+    const chainId = parseInt(req.query.chainId ?? 4663);
     const { search } = req.query;
 
     if (process.env.NODE_ENV !== "production")
@@ -299,7 +301,7 @@ export const getPrice = async (req, res, next) => {
       slippagePercentage = 0.01,
     } = req.query;
 
-    const chainId = parseInt(req.query.chainId ?? 1);
+    const chainId = parseInt(req.query.chainId ?? 4663);
 
     if (process.env.NODE_ENV !== "production") {
       console.log("\n[getPrice] ━━━ INCOMING REQUEST ━━━");
@@ -461,7 +463,7 @@ export const getQuote = async (req, res, next) => {
       skipValidation = false,
     } = req.query;
 
-    const chainId = parseInt(req.query.chainId ?? 1);
+    const chainId = parseInt(req.query.chainId ?? 4663);
 
     if (process.env.NODE_ENV !== "production") {
       console.log("\n[getQuote] ━━━ INCOMING REQUEST ━━━");

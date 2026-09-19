@@ -139,6 +139,53 @@ export async function getActivityFeed(_userId, { page = 1, limit = 20 } = {}) {
 }
 
 /**
+ * Unauthenticated, read-only teaser feed for the marketing website —
+ * recent posts from PUBLIC guilds only (private/token-gated guild content
+ * never reaches this, unlike getActivityFeed above, which doesn't filter
+ * by guild privacy and is only reachable behind Firebase auth in the app).
+ * Deliberately excludes every social-interaction field (likes/comments/
+ * reactions/reposts/impressions) — this is "here's what's happening,
+ * come join the app," not a feed to interact with from the website.
+ */
+export async function getPublicActivityFeed(limit = 20) {
+  try {
+    const posts    = getMongoDB().collection('guild_posts');
+    const rawLimit = limit * 4; // overfetch to survive the privacy filter below
+
+    const docs = await posts
+      .find({ isDeleted: false })
+      .sort({ timestamp: -1 })
+      .limit(rawLimit)
+      .toArray();
+
+    const uniqueGuildIds = [...new Set(docs.map(d => d.guildId).filter(Boolean))];
+    const guilds    = await guildDb.getGuildsByIds(uniqueGuildIds);
+    const guildMap  = Object.fromEntries(guilds.map(g => [g.id, g]));
+
+    return docs
+      .filter(doc => guildMap[doc.guildId]?.privacy === 'public')
+      .slice(0, limit)
+      .map(doc => {
+        const guild = guildMap[doc.guildId];
+        return {
+          id:           doc._id.toString(),
+          guildId:      doc.guildId,
+          guildName:    guild.name              || 'Unknown Guild',
+          guildLogoUrl: guild.logo_url || guild.logoUrl || null,
+          username:     doc.username            || 'Unknown',
+          userAvatar:   doc.userAvatar           || null,
+          description:  doc.description          || '',
+          imageUrl:     doc.imageUrl             || null,
+          timestamp:    doc.timestamp,
+        };
+      });
+  } catch (err) {
+    logger.error('feedService.getPublicActivityFeed:', err);
+    return [];
+  }
+}
+
+/**
  * Poll for new posts from ALL guilds since a timestamp (for real-time updates).
  */
 export async function pollActivityFeed(_userId, since) {
@@ -205,4 +252,5 @@ export default {
   getActivityFeed,
   pollActivityFeed,
   getGovernanceFeed,
+  getPublicActivityFeed,
 };

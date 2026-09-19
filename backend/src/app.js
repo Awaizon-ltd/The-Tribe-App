@@ -161,17 +161,10 @@ export function createApp() {
     message: { success: false, error: 'Sync rate limit reached.' },
   });
 
-  const mintLimiter = rateLimit({
-    windowMs: 60_000, max: 5, keyGenerator: keyByUidOrIp,
-    standardHeaders: true, legacyHeaders: false,
-    message: { success: false, error: 'Mint rate limit reached.' },
-  });
-
   app.use('/api', generalSlowDown, generalLimiter);
   app.use('/api/v1/daos/sync',     syncLimiter);
   app.use('/api/v1/daos/register', writeLimiter);
   app.use('/api/v1/chat',          writeLimiter);
-  app.use('/api/v1/mint',          mintLimiter);
 
   // ─── Request timeout (30 s) ───────────────────────────────────────────────────
   app.use((req, res, next) => {

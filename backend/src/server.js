@@ -7,6 +7,7 @@ import { connectMongoDB, getMongoDB, closeMongoDB } from './db/mongodb.js';
 import { connectRedis, getRedis, closeRedis } from './db/redis.js';
 import { startSyncWorker, stopSyncWorker } from './jobs/syncWorker.js';
 import { closeQueues } from './jobs/queues.js';
+import nftIndexerService from './services/nftIndexerService.js';
 import db from './db/postgres.js';
 import logger from './utils/logger.js';
 
@@ -88,6 +89,12 @@ async function startServer() {
         logger.info('Performing initial DAO fetch...');
         await blockchainService.fetchAllDAOs();
         logger.success('Initial DAO fetch completed');
+
+        try {
+          nftIndexerService.startPolling();
+        } catch (nftErr) {
+          logger.warn('NFT indexer failed to start (non-fatal):', nftErr.message);
+        }
       }
     } catch (error) {
       logger.error('Initialization error:', error);
@@ -103,6 +110,7 @@ async function startServer() {
     logger.info(`${signal} received — shutting down gracefully`);
 
     server.close(async () => {
+      if (IS_FIRST_WORKER) nftIndexerService.stopPolling();
       const tasks = [closeMongoDB(), closeRedis()];
       if (IS_FIRST_WORKER) tasks.push(stopSyncWorker(), closeQueues());
       await Promise.allSettled(tasks);

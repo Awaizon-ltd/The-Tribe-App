@@ -19,16 +19,18 @@ export const requireFirebaseAuth = async (req, res, next) => {
 
   const cached = getCachedToken(idToken);
   if (cached) {
-    req.uid       = cached.uid;
-    req.userEmail = cached.email;
+    req.uid          = cached.uid;
+    req.userEmail    = cached.email;
+    req.decodedToken = cached.decoded;
     return next();
   }
 
   try {
     const decoded = await getAdminAuth().verifyIdToken(idToken);
     cacheToken(idToken, decoded);
-    req.uid       = decoded.uid;
-    req.userEmail = decoded.email ?? null;
+    req.uid          = decoded.uid;
+    req.userEmail    = decoded.email ?? null;
+    req.decodedToken = decoded;
     next();
   } catch (err) {
     logger.warn('[firebaseAuth] Token verification failed:', err.message);

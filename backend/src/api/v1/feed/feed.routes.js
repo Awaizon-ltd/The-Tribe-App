@@ -21,6 +21,16 @@ router.get('/feed', requireAuth, async (req, res) => {
   } catch (e) { logger.error('GET /feed:', e); err(res, 500, e.message); }
 });
 
+// Unauthenticated teaser feed for the marketing website — public-guild
+// posts only, no social-interaction fields. See getPublicActivityFeed's
+// own comment for why this can't just reuse getActivityFeed above.
+router.get('/feed/public', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+    ok(res, await feedService.getPublicActivityFeed(limit));
+  } catch (e) { logger.error('GET /feed/public:', e); err(res, 500, e.message); }
+});
+
 router.get('/feed/poll', requireAuth, async (req, res) => {
   try {
     const since  = parseInt(req.query.since) || 0;

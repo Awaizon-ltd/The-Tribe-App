@@ -2,46 +2,50 @@
  * DAOFactory Contract Addresses
  * These are public blockchain addresses - not sensitive data
  */
+// Non-Robinhood chains are commented out (not deleted) — the app is
+// Robinhood Chain-only for now. These are inert data either way (nothing in
+// chains.js calls getFactoryAddress() for a commented-out chain), kept
+// commented for consistency with chains.js. Uncomment to bring one back.
 export const FACTORY_ADDRESSES = {
-  ETHEREUM: {
-    chainId: 1,
-    address: null, // Not deployed yet
-  },
+  // ETHEREUM: {
+  //   chainId: 1,
+  //   address: null, // Not deployed yet
+  // },
 
-  POLYGON: {
-    chainId: 137,
-    address: "0x3c181eaaB64052c726194Da6797EA06DD15e8E6B",
-  },
+  // POLYGON: {
+  //   chainId: 137,
+  //   address: "0x3c181eaaB64052c726194Da6797EA06DD15e8E6B",
+  // },
 
-  BSC: {
-    chainId: 56,
-    address: "0x3c181eaaB64052c726194Da6797EA06DD15e8E6B", // Not deployed yet
-  },
+  // BSC: {
+  //   chainId: 56,
+  //   address: "0x3c181eaaB64052c726194Da6797EA06DD15e8E6B", // Not deployed yet
+  // },
 
-  ARBITRUM: {
-    chainId: 42161,
-    address: "0x3c181eaaB64052c726194Da6797EA06DD15e8E6B",
-  },
+  // ARBITRUM: {
+  //   chainId: 42161,
+  //   address: "0x3c181eaaB64052c726194Da6797EA06DD15e8E6B",
+  // },
 
   // OPTIMISM: {
   //   chainId: 10,
   //   address: null, // Not deployed yet
   // },
 
-  AVALANCHE: {
-    chainId: 43114,
-    address: "0x3c181eaaB64052c726194Da6797EA06DD15e8E6B",
-  },
+  // AVALANCHE: {
+  //   chainId: 43114,
+  //   address: "0x3c181eaaB64052c726194Da6797EA06DD15e8E6B",
+  // },
 
-  BASE: {
-    chainId: 8453,
-    address: "0x38D64ef112d7d840667CfBc268179eE410403A94",
-  },
+  // BASE: {
+  //   chainId: 8453,
+  //   address: "0x38D64ef112d7d840667CfBc268179eE410403A94",
+  // },
 
-  BASE_SEPOLIA: {
-    chainId: 84532,
-    address: "0x4B3AD106552927494E0DB019170c1E5d4E5D08Eb",
-  },
+  // BASE_SEPOLIA: {
+  //   chainId: 84532,
+  //   address: "0x4B3AD106552927494E0DB019170c1E5d4E5D08Eb",
+  // },
 
   ROBINHOOD: {
     chainId: 4663,
