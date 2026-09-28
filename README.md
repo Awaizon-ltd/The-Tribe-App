@@ -49,8 +49,9 @@ Tribe combines a self-custodial multichain wallet with community features: tribe
 cd backend
 npm install
 # create backend/.env (see below)
-node src/scripts/migrate.js
-npm start
+npm run migrate          # create PostgreSQL tables
+npm run dev              # or: npm start
+npm run sync             # run the DAO indexer sync
 ```
 
 | Variable group | Variables |
