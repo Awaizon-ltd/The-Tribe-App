@@ -10,3 +10,8 @@ build/
 # Firebase service-account credentials (full Admin SDK access) — never commit
 *firebase-adminsdk*.json
 *serviceAccountKey*.json
+backend/.next
+backend/server.err
+crypto-wallet/.expo
+crypto-wallet/App copy.js
+crypto-wallet/screens/dao/ProposalDetailScreen copy.js
